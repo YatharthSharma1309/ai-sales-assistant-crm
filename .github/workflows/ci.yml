@@ -31,6 +31,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: npm install @rolldown/binding-linux-x64-gnu@1.0.3 lightningcss-linux-x64-gnu@1.32.0 --workspace=apps/web --no-save
       - run: npm run build:shared
       - run: npm run db:generate --workspace=packages/api
       - run: npx playwright install chromium --with-deps

@@ -10,8 +10,25 @@ import {
   revokeSessionByRefreshToken,
   revokeAllSessions,
   sessionAuthResponse,
+  refreshAuthResponse,
+  clearSessionCookie,
+  listActiveSessions,
+  parseUserAgent,
   hashToken,
 } from '../lib/authSession.js'
+import { readRefreshToken } from '../lib/refreshCookie.js'
+import {
+  registerLimiter,
+  loginLimiter,
+  refreshLimiter,
+  logoutLimiter,
+  inviteLookupLimiter,
+  acceptInviteLimiter,
+  verifyEmailChangeLimiter,
+  emailChangeLimiter,
+  changePasswordLimiter,
+  logoutAllLimiter,
+} from '../middleware/rateLimit.js'
 import { hashInviteToken } from '../lib/inviteToken.js'
 import {
   generateEmailChangeToken,
@@ -38,10 +55,6 @@ const loginSchema = z.object({
 
 const switchOrgSchema = z.object({
   organizationId: z.string().min(1),
-})
-
-const refreshSchema = z.object({
-  refreshToken: z.string().min(1),
 })
 
 const acceptInviteSchema = z.object({
@@ -82,7 +95,7 @@ function slugify(name: string): string {
   )
 }
 
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   const parsed = registerSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() })
@@ -126,7 +139,7 @@ router.post('/register', async (req, res) => {
   })
 
   res.status(201).json(
-    sessionAuthResponse(tokens, {
+    sessionAuthResponse(res, tokens, {
       user: {
         id: result.user.id,
         name: result.user.name,
@@ -138,7 +151,7 @@ router.post('/register', async (req, res) => {
   )
 })
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() })
@@ -200,7 +213,7 @@ router.post('/login', async (req, res) => {
   const organizations = await listUserOrganizations(user.id)
 
   res.json(
-    sessionAuthResponse(tokens, {
+    sessionAuthResponse(res, tokens, {
       user: { id: user.id, name: user.name, email: user.email },
       organization: membership.organization,
       role: membership.role,
@@ -209,36 +222,79 @@ router.post('/login', async (req, res) => {
   )
 })
 
-router.post('/refresh', async (req, res) => {
-  const parsed = refreshSchema.safeParse(req.body)
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() })
-    return
-  }
-
-  const tokens = await rotateRefreshToken(parsed.data.refreshToken)
-  if (!tokens) {
+router.post('/refresh', refreshLimiter, async (req, res) => {
+  const rawRefreshToken = readRefreshToken(req)
+  if (!rawRefreshToken) {
     res.status(401).json({ error: 'Invalid or expired refresh token' })
     return
   }
 
-  res.json(tokens)
-})
-
-router.post('/logout', async (req, res) => {
-  const parsed = refreshSchema.safeParse(req.body)
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() })
+  const result = await rotateRefreshToken(rawRefreshToken)
+  if (!result.ok) {
+    clearSessionCookie(res)
+    if (result.reason === 'reuse') {
+      res.status(401).json({
+        error: 'Session revoked',
+        code: 'REFRESH_REUSE',
+      })
+      return
+    }
+    res.status(401).json({ error: 'Invalid or expired refresh token' })
     return
   }
 
-  await revokeSessionByRefreshToken(parsed.data.refreshToken)
+  res.json(refreshAuthResponse(res, result.tokens))
+})
+
+router.post('/logout', logoutLimiter, async (req, res) => {
+  const rawRefreshToken = readRefreshToken(req)
+  if (rawRefreshToken) {
+    await revokeSessionByRefreshToken(rawRefreshToken)
+  }
+  clearSessionCookie(res)
   res.json({ ok: true })
 })
 
-router.post('/logout-all', protectedMiddleware, async (req, res) => {
+router.post('/logout-all', protectedMiddleware, logoutAllLimiter, async (req, res) => {
   await revokeAllSessions(req.auth!.userId, req.auth!.sid)
   res.json({ ok: true })
+})
+
+router.get('/sessions', protectedMiddleware, async (req, res) => {
+  const sessions = await listActiveSessions(req.auth!.userId)
+  res.json({
+    sessions: sessions.map((session) => ({
+      ...session,
+      deviceLabel: parseUserAgent(session.userAgent),
+      isCurrent: session.id === req.auth!.sid,
+    })),
+  })
+})
+
+router.delete('/sessions/:sessionId', protectedMiddleware, async (req, res) => {
+  const sessionId = String(req.params.sessionId)
+  const session = await prisma.authSession.findFirst({
+    where: {
+      id: sessionId,
+      userId: req.auth!.userId,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+      absoluteExpiresAt: { gt: new Date() },
+    },
+  })
+
+  if (!session) {
+    res.status(404).json({ error: 'Session not found' })
+    return
+  }
+
+  await revokeSession(sessionId)
+  const revokedCurrent = sessionId === req.auth!.sid
+  if (revokedCurrent) {
+    clearSessionCookie(res)
+  }
+
+  res.json({ ok: true, revokedCurrent })
 })
 
 router.get('/me', protectedMiddleware, async (req, res) => {
@@ -283,7 +339,7 @@ router.patch('/me', protectedMiddleware, async (req, res) => {
   res.json({ user })
 })
 
-router.patch('/me/email', protectedMiddleware, async (req, res) => {
+router.patch('/me/email', protectedMiddleware, emailChangeLimiter, async (req, res) => {
   const parsed = emailChangeSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() })
@@ -347,7 +403,7 @@ router.delete('/me/email', protectedMiddleware, async (req, res) => {
   res.json({ ok: true })
 })
 
-router.post('/verify-email-change', async (req, res) => {
+router.post('/verify-email-change', verifyEmailChangeLimiter, async (req, res) => {
   const parsed = verifyEmailChangeSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() })
@@ -387,7 +443,7 @@ router.post('/verify-email-change', async (req, res) => {
   res.json({ ok: true, email: newEmail })
 })
 
-router.post('/change-password', protectedMiddleware, async (req, res) => {
+router.post('/change-password', protectedMiddleware, changePasswordLimiter, async (req, res) => {
   const schema = z.object({
     currentPassword: z.string().min(1),
     newPassword: z.string().min(8),
@@ -452,7 +508,7 @@ router.post('/switch-org', protectedMiddleware, async (req, res) => {
   const organizations = await listUserOrganizations(user.id)
 
   res.json(
-    sessionAuthResponse(tokens, {
+    sessionAuthResponse(res, tokens, {
       user: { id: user.id, name: user.name, email: user.email },
       organization: membership.organization,
       role: membership.role,
@@ -461,7 +517,7 @@ router.post('/switch-org', protectedMiddleware, async (req, res) => {
   )
 })
 
-router.get('/invite/:token', async (req, res) => {
+router.get('/invite/:token', inviteLookupLimiter, async (req, res) => {
   const tokenHash = hashInviteToken(String(req.params.token))
   const invite = await prisma.teamInvite.findFirst({
     where: {
@@ -496,7 +552,7 @@ router.get('/invite/:token', async (req, res) => {
   })
 })
 
-router.post('/accept-invite', async (req, res) => {
+router.post('/accept-invite', acceptInviteLimiter, async (req, res) => {
   const parsed = acceptInviteSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() })
@@ -582,7 +638,7 @@ router.post('/accept-invite', async (req, res) => {
   const organizations = await listUserOrganizations(result.id)
 
   res.json(
-    sessionAuthResponse(tokens, {
+    sessionAuthResponse(res, tokens, {
       user: { id: result.id, name: result.name, email: result.email },
       organization: invite.organization,
       role: invite.role,

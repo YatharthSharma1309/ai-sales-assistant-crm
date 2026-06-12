@@ -41,12 +41,15 @@ function Test-ExpectStatus($name, $scriptBlock, $expectedStatus) {
   }
 }
 
+$script:webSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+
 function Api($Method, $Uri, $Body = $null, $Headers = $script:headers, $ExtraHeaders = @{}) {
   $params = @{
     Uri = $Uri
     Method = $Method
     Headers = $Headers + $ExtraHeaders
     ContentType = "application/json"
+    WebSession = $script:webSession
   }
   if ($null -ne $Body) { $params.Body = $Body }
   return Invoke-RestMethod @params
@@ -61,7 +64,6 @@ Test-Step "Register admin workspace" {
   if (-not $script:reg.accessToken -and -not $script:reg.token) { throw "No access token" }
   $access = if ($script:reg.accessToken) { $script:reg.accessToken } else { $script:reg.token }
   $script:headers = @{ Authorization = "Bearer $access" }
-  $script:refreshToken = $script:reg.refreshToken
   $script:orgId = $script:reg.organization.id
   $script:userId = $script:reg.user.id
 }
@@ -79,16 +81,19 @@ Test-Step "Login with credentials" {
   $body = @{ email = $email; password = $password } | ConvertTo-Json
   $login = Api Post "$Base/api/auth/login" $body @{}
   if (-not $login.accessToken -and -not $login.token) { throw "No login token" }
-  $script:refreshToken = $login.refreshToken
 }
 
-Test-Step "Refresh access token" {
-  if (-not $script:refreshToken) { throw "No refresh token from login" }
-  $body = @{ refreshToken = $script:refreshToken } | ConvertTo-Json
-  $refreshed = Api Post "$Base/api/auth/refresh" $body @{}
+Test-Step "Refresh access token via httpOnly cookie" {
+  $refreshed = Api Post "$Base/api/auth/refresh" "{}" @{}
   if (-not $refreshed.accessToken) { throw "No refreshed access token" }
   $script:headers = @{ Authorization = "Bearer $($refreshed.accessToken)" }
-  $script:refreshToken = $refreshed.refreshToken
+}
+
+Test-Step "List active sessions" {
+  $sessions = Api Get "$Base/api/auth/sessions"
+  if (-not $sessions.sessions -or $sessions.sessions.Count -lt 1) {
+    throw "Expected at least one active session"
+  }
 }
 
 Test-Step "Change password" {
@@ -102,7 +107,6 @@ Test-Step "Login with new password" {
   $login = Api Post "$Base/api/auth/login" $body @{}
   $access = if ($login.accessToken) { $login.accessToken } else { $login.token }
   $script:headers = @{ Authorization = "Bearer $access" }
-  $script:refreshToken = $login.refreshToken
 }
 
 Test-ExpectStatus "Switch-org invalid org 403" {

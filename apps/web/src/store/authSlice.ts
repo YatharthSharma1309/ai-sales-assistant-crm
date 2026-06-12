@@ -8,13 +8,11 @@ import {
 
   clearTokens,
 
-  getAccessToken,
-
-  getRefreshToken,
-
   logoutApi,
 
   setTokens,
+
+  tryRestoreSession,
 
 } from '../shared/api/client'
 
@@ -70,7 +68,7 @@ const initialState: AuthState = {
 
   error: null,
 
-  sessionChecked: !getAccessToken(),
+  sessionChecked: false,
 
 }
 
@@ -94,7 +92,7 @@ function storeAuthTokens(data: TokenResponse) {
 
   if (!access) return
 
-  setTokens(access, data.refreshToken ?? getRefreshToken())
+  setTokens(access)
 
 }
 
@@ -223,6 +221,17 @@ export const acceptInvite = createAsyncThunk(
 )
 
 
+
+export const restoreSession = createAsyncThunk(
+  'auth/restoreSession',
+  async (_, { dispatch, rejectWithValue }) => {
+    const restored = await tryRestoreSession()
+    if (!restored) {
+      return rejectWithValue({ status: 401, message: 'No active session' })
+    }
+    return dispatch(fetchMe()).unwrap()
+  },
+)
 
 export const fetchMe = createAsyncThunk(
 
@@ -535,6 +544,28 @@ const authSlice = createSlice({
       })
 
       .addCase(acceptInvite.rejected, rejected)
+
+      .addCase(restoreSession.pending, pending)
+
+      .addCase(restoreSession.fulfilled, (state, action) => {
+        state.loading = false
+        state.sessionChecked = true
+        state.error = null
+        state.user = action.payload.user
+        state.organization = action.payload.organization
+        state.role = action.payload.role
+        state.organizations = action.payload.organizations ?? []
+      })
+
+      .addCase(restoreSession.rejected, (state) => {
+        state.loading = false
+        state.sessionChecked = true
+        state.user = null
+        state.organization = null
+        state.role = null
+        state.organizations = []
+        state.error = null
+      })
 
       .addCase(fetchMe.pending, pending)
 

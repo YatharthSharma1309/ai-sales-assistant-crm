@@ -84,22 +84,25 @@ model User {
 }
 
 model AuthSession {
-  id             String    @id @default(cuid())
-  userId         String
-  tokenHash      String    @unique
-  organizationId String?
-  role           String?
-  userAgent      String?
-  ipAddress      String?
-  expiresAt      DateTime
-  revokedAt      DateTime?
-  lastUsedAt     DateTime  @default(now())
-  createdAt      DateTime  @default(now())
+  id                String    @id @default(cuid())
+  userId            String
+  familyId          String
+  tokenHash         String    @unique
+  organizationId    String?
+  role              String?
+  userAgent         String?
+  ipAddress         String?
+  expiresAt         DateTime
+  absoluteExpiresAt DateTime
+  revokedAt         DateTime?
+  lastUsedAt        DateTime  @default(now())
+  createdAt         DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, revokedAt])
+  @@index([familyId])
 }
 
 model TeamInvite {

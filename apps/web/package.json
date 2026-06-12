@@ -19,6 +19,10 @@
     "react-redux": "^9.3.0",
     "react-router-dom": "^7.17.0"
   },
+  "optionalDependencies": {
+    "@rolldown/binding-linux-x64-gnu": "1.0.3",
+    "@rolldown/binding-win32-x64-msvc": "1.0.3"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.0",

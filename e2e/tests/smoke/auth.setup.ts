@@ -1,7 +1,10 @@
+import fs from 'node:fs'
 import { expect, test as setup } from '@playwright/test'
+import { authDir, storageState } from '../../fixtures/auth'
 import { orgName, users } from '../../fixtures/users'
 
 const API = process.env.E2E_API_URL ?? 'http://localhost:3011'
+const WEB_ORIGIN = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5174'
 
 async function login(email: string, password: string) {
   return fetch(`${API}/api/auth/login`, {
@@ -12,22 +15,34 @@ async function login(email: string, password: string) {
 }
 
 setup('seed e2e users via API', async () => {
-  const adminLogin = await login(users.admin.email, users.admin.password)
-  if (adminLogin.ok) return
+  let adminToken: string | null = null
 
-  const register = await fetch(`${API}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: users.admin.name,
-      email: users.admin.email,
-      password: users.admin.password,
-      organizationName: orgName,
-    }),
-  })
-  expect(register.ok).toBeTruthy()
-  const adminAuth = (await register.json()) as { accessToken: string; token?: string }
-  const adminToken = adminAuth.accessToken ?? adminAuth.token
+  const adminLogin = await login(users.admin.email, users.admin.password)
+  if (adminLogin.ok) {
+    const adminAuth = (await adminLogin.json()) as {
+      accessToken?: string
+      token?: string
+    }
+    adminToken = adminAuth.accessToken ?? adminAuth.token ?? null
+  } else {
+    const register = await fetch(`${API}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: users.admin.name,
+        email: users.admin.email,
+        password: users.admin.password,
+        organizationName: orgName,
+      }),
+    })
+    expect(register.ok).toBeTruthy()
+    const adminAuth = (await register.json()) as {
+      accessToken?: string
+      token?: string
+    }
+    adminToken = adminAuth.accessToken ?? adminAuth.token ?? null
+  }
+
   expect(adminToken).toBeTruthy()
 
   for (const [role, user] of [
@@ -41,7 +56,7 @@ setup('seed e2e users via API', async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${adminToken}`,
+        Authorization: `Bearer ${adminToken!}`,
       },
       body: JSON.stringify({
         name: user.name,
@@ -69,3 +84,32 @@ setup('seed e2e users via API', async () => {
     expect(accept.ok).toBeTruthy()
   }
 })
+
+for (const role of ['admin', 'manager', 'rep'] as const) {
+  setup(`authenticate ${role}`, async () => {
+    fs.mkdirSync(authDir, { recursive: true })
+    const user = users[role]
+
+    const response = await login(user.email, user.password)
+    expect(response.ok).toBeTruthy()
+    const body = (await response.json()) as {
+      accessToken?: string
+      token?: string
+    }
+    const accessToken = body.accessToken ?? body.token
+    expect(accessToken).toBeTruthy()
+
+    fs.writeFileSync(
+      storageState[role],
+      JSON.stringify({
+        cookies: [],
+        origins: [
+          {
+            origin: WEB_ORIGIN,
+            localStorage: [{ name: 'crm_access_token', value: accessToken }],
+          },
+        ],
+      }),
+    )
+  })
+}

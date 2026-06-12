@@ -181,11 +181,15 @@ npm run preview --workspace=apps/web
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `JWT_SECRET` | Long random string for auth tokens |
-| `REFRESH_TOKEN_TTL_DAYS` | Refresh session lifetime (default `30`) |
+| `REFRESH_TOKEN_TTL_DAYS` | Sliding inactivity window for refresh sessions (default `30`) |
+| `REFRESH_TOKEN_ABSOLUTE_TTL_DAYS` | Maximum session lifetime from first sign-in (default `90`) |
 | `INVITE_EXPIRY_HOURS` | Team invite link lifetime (default `168` = 7 days) |
 | `FRONTEND_URL` | Vercel production URL (CORS + magic-link URLs) |
 | `CORS_ORIGINS` | Vercel URL + preview URLs (comma-separated) |
 | `API_PUBLIC_URL` | Public API URL (webhook signature verification) |
+| `TRUST_PROXY` | Set `1` when API runs behind Railway/Render/nginx |
+| `REFRESH_COOKIE_SAME_SITE` | `none` for cross-origin Vercel → API (requires HTTPS) |
+| `COOKIE_DOMAIN` | Optional shared cookie domain (e.g. `.yourdomain.com`) |
 
 ### AI & email
 

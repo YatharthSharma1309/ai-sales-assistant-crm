@@ -5,7 +5,7 @@ CRM for B2B SaaS sales teams with lead management, pipeline tracking, AI-powered
 ## Features
 
 ### Auth & security
-- **Dual-token sessions** — 15-minute access JWT + 30-day rotating refresh token (`AuthSession` table)
+- **Dual-token sessions** — 15-minute access JWT + httpOnly refresh cookie with rotation, reuse detection, and sliding/absolute TTL (`AuthSession` table)
 - **Magic-link team invites** — Email invite links; no temporary passwords
 - **Verified email change** — Re-auth + confirmation link to new address
 - **Session control** — Per-device logout, sign out everywhere, revoke on password/email change
@@ -103,7 +103,7 @@ INVITE_EXPIRY_HOURS=168
 FRONTEND_URL="http://localhost:5173"
 ```
 
-Access tokens expire in **15 minutes**. Refresh tokens default to **30 days** (`REFRESH_TOKEN_TTL_DAYS`). Team invite links default to **7 days** (`INVITE_EXPIRY_HOURS=168`).
+Access tokens expire in **15 minutes**. Refresh tokens live in an **httpOnly cookie** with a **30-day sliding** window (`REFRESH_TOKEN_TTL_DAYS`) capped at **90 days** absolute (`REFRESH_TOKEN_ABSOLUTE_TTL_DAYS`). Team invite links default to **7 days** (`INVITE_EXPIRY_HOURS=168`).
 
 ### 3. Initialize database
 
@@ -136,7 +136,7 @@ See `packages/api/.env.example` for the full list. Key groups:
 
 | Group | Variables |
 |-------|-----------|
-| **Core** | `DATABASE_URL`, `JWT_SECRET`, `REFRESH_TOKEN_TTL_DAYS`, `INVITE_EXPIRY_HOURS`, `PORT`, `FRONTEND_URL`, `CORS_ORIGINS` |
+| **Core** | `DATABASE_URL`, `JWT_SECRET`, `REFRESH_TOKEN_TTL_DAYS`, `REFRESH_TOKEN_ABSOLUTE_TTL_DAYS`, `INVITE_EXPIRY_HOURS`, `PORT`, `FRONTEND_URL`, `CORS_ORIGINS`, `TRUST_PROXY`, `REFRESH_COOKIE_SAME_SITE` |
 | **AI & email** | `OPENAI_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL` |
 | **BCC logging** | `EMAIL_LOG_DOMAIN`, `INBOUND_EMAIL_WEBHOOK_SECRET` |
 | **Google** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` |
@@ -158,6 +158,8 @@ Without OpenAI, AI endpoints use mock mode. Without Resend, use **Copy** on emai
 | POST | `/api/auth/refresh` | Rotate refresh token for new access token |
 | POST | `/api/auth/logout` | Revoke current session (`{ refreshToken }`) |
 | POST | `/api/auth/logout-all` | Revoke all sessions except current |
+| GET | `/api/auth/sessions` | List active sessions (device, IP, last active) |
+| DELETE | `/api/auth/sessions/:id` | Revoke a single session |
 | GET | `/api/auth/me` | Current user + organizations |
 | PATCH | `/api/auth/me` | Update profile name |
 | PATCH | `/api/auth/me/email` | Request verified email change |
@@ -315,7 +317,7 @@ Managers can delete accounts and contacts. Managers and assigned reps can delete
 ## Tests
 
 ```bash
-npm run test:api    # API unit tests (Vitest, 33+ tests)
+npm run test:api    # API unit tests (Vitest, 37+ tests)
 npm run test:web    # Frontend unit tests (Vitest)
 npm run test:e2e    # Playwright smoke tests — self-starts API + web
 ```
@@ -358,18 +360,54 @@ npm run test:e2e
 | `npm run test:web` | Web unit tests |
 | `npm run test:e2e` | Playwright E2E smoke suite |
 
-## Roadmap (recommended improvements)
+## Security hardening
 
-Based on 2025–2026 auth and E2E best practices ([OAuth 2.1 refresh rotation](https://jsonic.io/guides/jwt-refresh-token), [Playwright auth setup](https://playwright.dev/docs/auth)):
+Post-MVP auth, session, and test infrastructure improvements.
 
-| Priority | Improvement | Why |
-|----------|-------------|-----|
-| High | **httpOnly cookies** for refresh tokens | Replaces `localStorage` to reduce XSS token theft |
-| High | **Refresh reuse detection** + token families | Revoke all sessions when a rotated refresh token is replayed |
-| High | **Rate limiting** on auth/invite endpoints | Mitigate credential stuffing and invite abuse |
-| Medium | **Playwright `storageState`** | Skip repeated UI logins in E2E; faster, less flaky CI |
-| Medium | **Page Object Model** for E2E | Maintainable selectors as the UI grows |
-| Low | Per-session UI in Settings | List active devices (data already in `AuthSession`) |
-| Low | Absolute + sliding session TTL | 90-day max lifetime with 30-day inactivity window |
+### High priority — Auth security
 
-These are documented as follow-ups; the current stack intentionally uses `localStorage` and in-place refresh rotation for a smaller initial diff.
+| Item | Implementation |
+|------|----------------|
+| **httpOnly refresh cookies** | `crm_refresh` cookie via `packages/api/src/lib/refreshCookie.ts`; frontend uses `credentials: 'include'`; refresh token removed from `localStorage`; silent restore via `tryRestoreSession()` on protected routes |
+| **Refresh reuse detection** | Insert-per-rotate in `authSession.ts`: spent token replay revokes the whole `familyId` and returns `REFRESH_REUSE` |
+| **Rate limiting** | `express-rate-limit` in `packages/api/src/middleware/rateLimit.ts` on login, register, refresh, logout, invites, email change, password change, team invite/resend |
+
+### Medium priority — E2E
+
+| Item | Implementation |
+|------|----------------|
+| **Playwright `storageState`** | `e2e/.auth/{admin,manager,rep}.json` saved in `auth.setup.ts`; `layout` + `team-permissions` use pre-authenticated projects |
+| **Page Object Model** | `e2e/pages/LoginPage.ts`, `AppLayoutPage.ts`, `TeamPage.ts` |
+
+### Low priority — Sessions & TTL
+
+| Item | Implementation |
+|------|----------------|
+| **Per-session UI in Settings** | `GET /api/auth/sessions`, `DELETE /api/auth/sessions/:id`; device list with revoke + sign out everywhere |
+| **Absolute + sliding TTL** | `REFRESH_TOKEN_TTL_DAYS` (30d sliding) capped by `REFRESH_TOKEN_ABSOLUTE_TTL_DAYS` (90d max) |
+
+### CI & testing
+
+| Item | Implementation |
+|------|----------------|
+| **Vitest on Linux** | `apps/web/vitest.config.ts` (`environment: 'node'`); optional `@rolldown/binding-linux-x64-gnu`; CI installs Linux binding after `npm ci` |
+| **Regression scripts** | `scripts/live-test-extended.ps1` uses cookie jar (`WebSession`) for refresh rotation |
+
+Run the full suite:
+
+```bash
+npm run test:api    # API unit tests
+npm run test:web    # Frontend unit tests
+npm run test:e2e    # Playwright smoke (14 specs)
+```
+
+### Auth environment variables
+
+```env
+REFRESH_TOKEN_TTL_DAYS=30
+REFRESH_TOKEN_ABSOLUTE_TTL_DAYS=90
+TRUST_PROXY=0                    # set to 1 behind Railway/Render
+REFRESH_COOKIE_SAME_SITE=lax     # use "none" for cross-origin API in production (requires HTTPS)
+COOKIE_DOMAIN=                   # optional; e.g. .yourdomain.com
+RATE_LIMIT_DISABLED=0            # set to 1 only for local E2E (Playwright sets this automatically)
+```

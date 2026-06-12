@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { ROLE_LABELS } from '../../shared/constants/roles'
 import { useRole } from '../../shared/hooks/useRole'
-import { api } from '../../shared/api/client'
+import { api, clearTokens } from '../../shared/api/client'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import {
   cancelEmailChange,
@@ -21,6 +21,15 @@ type OrgDetails = {
   slug: string
   createdAt: string
   _count: { memberships: number; leads: number; deals: number }
+}
+
+type SessionInfo = {
+  id: string
+  deviceLabel: string
+  ipAddress: string | null
+  lastUsedAt: string
+  createdAt: string
+  isCurrent: boolean
 }
 
 export function SettingsPage() {
@@ -46,6 +55,29 @@ export function SettingsPage() {
   const [emailMessage, setEmailMessage] = useState<string | null>(null)
   const [savingEmail, setSavingEmail] = useState(false)
   const [signingOutAll, setSigningOutAll] = useState(false)
+  const [sessions, setSessions] = useState<SessionInfo[]>([])
+  const [loadingSessions, setLoadingSessions] = useState(true)
+  const [sessionsError, setSessionsError] = useState<string | null>(null)
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(
+    null,
+  )
+
+  async function loadSessions() {
+    setLoadingSessions(true)
+    setSessionsError(null)
+    try {
+      const data = await api<{ sessions: SessionInfo[] }>('/api/auth/sessions')
+      setSessions(data.sessions)
+    } catch {
+      setSessionsError('Could not load active sessions.')
+    } finally {
+      setLoadingSessions(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadSessions()
+  }, [])
 
   useEffect(() => {
     setProfileName(user?.name ?? '')
@@ -129,6 +161,37 @@ export function SettingsPage() {
       setMessage('Failed to sign out everywhere.')
       setSigningOutAll(false)
     }
+  }
+
+  async function handleRevokeSession(sessionId: string) {
+    setRevokingSessionId(sessionId)
+    try {
+      const result = await api<{ ok: boolean; revokedCurrent?: boolean }>(
+        `/api/auth/sessions/${sessionId}`,
+        { method: 'DELETE' },
+      )
+      if (result.revokedCurrent) {
+        clearTokens()
+        window.location.href = '/login'
+        return
+      }
+      await loadSessions()
+    } catch {
+      setSessionsError('Failed to revoke session.')
+    } finally {
+      setRevokingSessionId(null)
+    }
+  }
+
+  function formatRelativeTime(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime()
+    const minutes = Math.floor(diff / 60000)
+    if (minutes < 1) return 'just now'
+    if (minutes < 60) return `${minutes} min ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours} hr ago`
+    const days = Math.floor(hours / 24)
+    return `${days} day${days === 1 ? '' : 's'} ago`
   }
 
   async function handleChangePassword(e: FormEvent) {
@@ -309,13 +372,67 @@ export function SettingsPage() {
           <div className="mt-8 border-t border-slate-100 pt-6">
             <h3 className="text-sm font-semibold text-slate-900">Sessions</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Sign out on all devices except this browser.
+              Manage devices where you&apos;re signed in.
             </p>
+
+            {loadingSessions && (
+              <p className="mt-3 text-sm text-slate-500">Loading sessions...</p>
+            )}
+            {sessionsError && (
+              <p className="mt-3 text-sm text-red-600">{sessionsError}</p>
+            )}
+            {!loadingSessions && sessions.length === 0 && !sessionsError && (
+              <p className="mt-3 text-sm text-slate-500">No other active sessions.</p>
+            )}
+            {!loadingSessions && sessions.length > 0 && (
+              <ul className="mt-4 space-y-3">
+                {sessions.map((session) => (
+                  <li
+                    key={session.id}
+                    className="rounded-lg border border-slate-200 px-4 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">
+                          {session.deviceLabel}
+                          {session.isCurrent && (
+                            <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                              This device
+                            </span>
+                          )}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {session.ipAddress ?? 'Unknown IP'} · Last active{' '}
+                          {formatRelativeTime(session.lastUsedAt)}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          Signed in{' '}
+                          {new Date(session.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {!session.isCurrent && (
+                        <button
+                          type="button"
+                          disabled={revokingSessionId === session.id}
+                          onClick={() => void handleRevokeSession(session.id)}
+                          className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+                        >
+                          {revokingSessionId === session.id
+                            ? 'Revoking...'
+                            : 'Revoke'}
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             <button
               type="button"
               disabled={signingOutAll}
               onClick={handleLogoutAll}
-              className="mt-3 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+              className="mt-4 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
             >
               {signingOutAll ? 'Signing out...' : 'Sign out everywhere'}
             </button>

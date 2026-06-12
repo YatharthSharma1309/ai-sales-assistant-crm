@@ -10,6 +10,7 @@ import {
   buildInviteAcceptUrl,
 } from '../lib/inviteToken.js'
 import { sendTeamInviteEmail } from '../lib/sendTeamInviteEmail.js'
+import { teamInviteLimiter, teamResendLimiter } from '../middleware/rateLimit.js'
 
 const router = Router()
 router.use(protectedMiddleware)
@@ -111,7 +112,7 @@ router.get('/invites', requireRole('ADMIN', 'MANAGER'), async (req, res) => {
   )
 })
 
-router.post('/invite', requireRole('ADMIN', 'MANAGER'), async (req, res) => {
+router.post('/invite', requireRole('ADMIN', 'MANAGER'), teamInviteLimiter, async (req, res) => {
   const parsed = inviteSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() })
@@ -239,6 +240,7 @@ router.delete(
 router.post(
   '/invites/:id/resend',
   requireRole('ADMIN', 'MANAGER'),
+  teamResendLimiter,
   async (req, res) => {
     const inviteId = String(req.params.id)
     const invite = await prisma.teamInvite.findFirst({

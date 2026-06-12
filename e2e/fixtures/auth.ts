@@ -1,5 +1,15 @@
+import path from 'node:path'
 import type { Page } from '@playwright/test'
+import { LoginPage } from '../pages/LoginPage'
+import { waitForAppReady } from './app'
 import { users } from './users'
+
+export const authDir = path.join(__dirname, '..', '.auth')
+export const storageState = {
+  admin: path.join(authDir, 'admin.json'),
+  manager: path.join(authDir, 'manager.json'),
+  rep: path.join(authDir, 'rep.json'),
+} as const
 
 export async function fillLoginForm(
   page: Page,
@@ -15,13 +25,13 @@ export async function loginAs(
   role: keyof typeof users,
 ): Promise<void> {
   const user = users[role]
-  await page.goto('/login')
-  await fillLoginForm(page, user.email, user.password)
-  await page.getByRole('button', { name: /sign in/i }).click()
-  await page.waitForURL('/')
+  const login = new LoginPage(page)
+  await login.login(user.email, user.password)
+  await waitForAppReady(page)
 }
 
 export async function clearAuthStorage(page: Page): Promise<void> {
+  await page.context().clearCookies()
   await page.evaluate(() => {
     localStorage.removeItem('crm_access_token')
     localStorage.removeItem('crm_refresh_token')

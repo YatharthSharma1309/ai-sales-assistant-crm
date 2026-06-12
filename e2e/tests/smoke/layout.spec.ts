@@ -1,10 +1,13 @@
 import { expect, test } from '@playwright/test'
-import { loginAs } from '../../fixtures/auth'
+import { waitForAppReady } from '../../fixtures/app'
+import { AppLayoutPage } from '../../pages/AppLayoutPage'
 
 test('header and footer are visible when authenticated', async ({ page }) => {
-  await loginAs(page, 'admin')
+  const layout = new AppLayoutPage(page)
+  await page.goto('/')
+  await waitForAppReady(page)
 
-  await expect(page.getByRole('banner')).toBeVisible()
-  await expect(page.getByRole('contentinfo')).toBeVisible()
-  await expect(page.getByRole('contentinfo')).toContainText('AI Sales Assistant CRM')
+  await expect(layout.header()).toBeVisible()
+  await expect(layout.footer()).toBeVisible()
+  await expect(layout.footer()).toContainText('AI Sales Assistant CRM')
 })

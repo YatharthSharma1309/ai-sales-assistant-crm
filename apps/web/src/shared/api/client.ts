@@ -1,5 +1,5 @@
 const ACCESS_TOKEN_KEY = 'crm_access_token'
-const REFRESH_TOKEN_KEY = 'crm_refresh_token'
+const LEGACY_REFRESH_KEY = 'crm_refresh_token'
 const LEGACY_TOKEN_KEY = 'crm_token'
 
 function migrateLegacyToken(): string | null {
@@ -16,8 +16,9 @@ export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY) ?? migrateLegacyToken()
 }
 
+/** @deprecated Refresh tokens are stored in httpOnly cookies */
 export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_TOKEN_KEY)
+  return null
 }
 
 /** @deprecated Use getAccessToken */
@@ -25,7 +26,7 @@ export function getToken(): string | null {
   return getAccessToken()
 }
 
-export function setTokens(accessToken: string | null, refreshToken?: string | null) {
+export function setTokens(accessToken: string | null) {
   if (accessToken) {
     localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
     localStorage.removeItem(LEGACY_TOKEN_KEY)
@@ -33,24 +34,21 @@ export function setTokens(accessToken: string | null, refreshToken?: string | nu
     localStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(LEGACY_TOKEN_KEY)
   }
-
-  if (refreshToken !== undefined) {
-    if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
-    else localStorage.removeItem(REFRESH_TOKEN_KEY)
-  }
 }
 
 /** @deprecated Use setTokens */
 export function setToken(token: string | null) {
-  setTokens(token, token ? getRefreshToken() : null)
+  setTokens(token)
 }
 
 export function clearTokens() {
-  setTokens(null, null)
+  localStorage.removeItem(LEGACY_REFRESH_KEY)
+  setTokens(null)
 }
 
 export type ApiErrorBody = {
   error?: string
+  code?: string
   requiresConfirmation?: boolean
   [key: string]: unknown
 }
@@ -68,17 +66,27 @@ export class ApiError extends Error {
 
 let refreshPromise: Promise<boolean> | null = null
 
-async function refreshAccessToken(): Promise<boolean> {
-  const refreshToken = getRefreshToken()
-  if (!refreshToken) return false
+function apiBase() {
+  return import.meta.env.VITE_API_URL ?? ''
+}
 
-  const base = import.meta.env.VITE_API_URL ?? ''
+function fetchOptions(options: RequestInit = {}): RequestInit {
+  return {
+    credentials: 'include',
+    ...options,
+  }
+}
+
+async function refreshAccessToken(): Promise<boolean> {
+  const base = apiBase()
   try {
-    const response = await fetch(`${base}/api/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    })
+    const response = await fetch(
+      `${base}/api/auth/refresh`,
+      fetchOptions({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
 
     if (!response.ok) {
       clearTokens()
@@ -87,10 +95,10 @@ async function refreshAccessToken(): Promise<boolean> {
 
     const data = (await response.json()) as {
       accessToken: string
-      refreshToken: string
+      token?: string
     }
-    setTokens(data.accessToken, data.refreshToken)
-    return true
+    setTokens(data.accessToken ?? data.token ?? null)
+    return Boolean(data.accessToken ?? data.token)
   } catch {
     return false
   }
@@ -103,6 +111,12 @@ async function ensureRefreshed(): Promise<boolean> {
     })
   }
   return refreshPromise
+}
+
+/** Restore access token from httpOnly refresh cookie (e.g. after browser restart). */
+export async function tryRestoreSession(): Promise<boolean> {
+  if (getAccessToken()) return true
+  return refreshAccessToken()
 }
 
 export async function api<T>(
@@ -120,10 +134,13 @@ export async function api<T>(
     ;(headers as Record<string, string>).Authorization = `Bearer ${token}`
   }
 
-  const base = import.meta.env.VITE_API_URL ?? ''
-  const response = await fetch(`${base}${path}`, { ...options, headers })
+  const base = apiBase()
+  const response = await fetch(
+    `${base}${path}`,
+    fetchOptions({ ...options, headers }),
+  )
 
-  if (response.status === 401 && !retried && getRefreshToken()) {
+  if (response.status === 401 && !retried) {
     const refreshed = await ensureRefreshed()
     if (refreshed) {
       return api<T>(path, options, true)
@@ -132,6 +149,9 @@ export async function api<T>(
 
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as ApiErrorBody
+    if (body.code === 'REFRESH_REUSE') {
+      clearTokens()
+    }
     throw new ApiError(body.error ?? 'Request failed', response.status, body)
   }
 
@@ -143,16 +163,17 @@ export async function api<T>(
 }
 
 export async function logoutApi(): Promise<void> {
-  const refreshToken = getRefreshToken()
-  if (refreshToken) {
-    try {
-      await api('/api/auth/logout', {
+  const base = apiBase()
+  try {
+    await fetch(
+      `${base}/api/auth/logout`,
+      fetchOptions({
         method: 'POST',
-        body: JSON.stringify({ refreshToken }),
-      })
-    } catch {
-      // ignore — clear local tokens regardless
-    }
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+  } catch {
+    // ignore — clear local tokens regardless
   }
   clearTokens()
 }

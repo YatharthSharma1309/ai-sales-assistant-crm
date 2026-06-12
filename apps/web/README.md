@@ -44,13 +44,13 @@ src/
 
 ## Auth & tokens (frontend)
 
-| Storage key | Purpose |
-|-------------|---------|
-| `crm_access_token` | 15-minute JWT sent as `Authorization: Bearer` |
-| `crm_refresh_token` | Opaque token for `POST /api/auth/refresh` |
-| `crm_token` | Legacy key — migrated once on read |
+| Storage | Purpose |
+|---------|---------|
+| `crm_access_token` (localStorage) | 15-minute JWT sent as `Authorization: Bearer` |
+| `crm_refresh` (httpOnly cookie) | Opaque refresh token for `POST /api/auth/refresh` |
+| `crm_token` (localStorage) | Legacy key — migrated once on read |
 
-Sign out calls `POST /api/auth/logout` then clears local storage.
+All API calls use `credentials: 'include'` so the refresh cookie is sent. Sign out calls `POST /api/auth/logout` (clears cookie) then clears local access token.
 
 Public routes (no login required):
 

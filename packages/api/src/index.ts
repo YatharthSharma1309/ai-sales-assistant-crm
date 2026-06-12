@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import cookieParser from 'cookie-parser'
 import {
   handleHubSpotWebhook,
   handleSalesforceWebhook,
@@ -23,6 +24,10 @@ import { startGmailSyncJob } from './jobs/gmailSyncJob.js'
 
 const app = express()
 const port = Number(process.env.PORT) || 3001
+
+if (process.env.TRUST_PROXY === '1') {
+  app.set('trust proxy', 1)
+}
 const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
 const extraOrigins = (process.env.CORS_ORIGINS ?? '')
   .split(',')
@@ -47,6 +52,7 @@ app.post(
   handleSalesforceWebhook,
 )
 
+app.use(cookieParser())
 app.use(express.json())
 
 app.get('/api/health', (_req, res) => {

@@ -1,40 +1,56 @@
 import { expect, test } from '@playwright/test'
-import { loginAs } from '../../fixtures/auth'
+import { waitForAppReady } from '../../fixtures/app'
+import { storageState } from '../../fixtures/auth'
 import { users } from '../../fixtures/users'
+import { AppLayoutPage } from '../../pages/AppLayoutPage'
+import { TeamPage } from '../../pages/TeamPage'
+
+test.use({ storageState: storageState.rep })
 
 test('rep cannot see team nav and is redirected from /team', async ({ page }) => {
-  await loginAs(page, 'rep')
+  const layout = new AppLayoutPage(page)
+  await page.goto('/')
+  await waitForAppReady(page)
 
-  await expect(page.getByRole('link', { name: 'Team' })).toHaveCount(0)
+  await expect(layout.navLink('Team')).toHaveCount(0)
 
   await page.goto('/team')
   await expect(page).toHaveURL(/\/?(\?notice=team-access)?$/)
 })
 
-test('admin can open team page, invite, and change roles', async ({ page }) => {
-  await loginAs(page, 'admin')
+test.describe('admin team permissions', () => {
+  test.use({ storageState: storageState.admin })
 
-  await page.locator('nav a[href="/team"]').first().click()
-  await expect(page.getByRole('heading', { name: 'Team' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Invite member' })).toBeVisible()
+  test('admin can open team page, invite, and change roles', async ({ page }) => {
+    const team = new TeamPage(page)
+    await page.goto('/')
+    await waitForAppReady(page)
+    await team.goto()
 
-  await page.getByRole('button', { name: 'Invite member' }).click()
-  await page.locator('form input[type="email"]').fill(`invite-${Date.now()}@test.local`)
-  await page.getByRole('button', { name: 'Send invite' }).click()
+    await expect(team.heading()).toBeVisible()
+    await expect(team.inviteButton(true)).toBeVisible()
 
-  await expect(page.getByText(/Invitation email sent|Invite sent/)).toBeVisible()
+    await team.openInviteForm(true)
+    await team.fillInviteEmail(`invite-${Date.now()}@test.local`)
+    await team.sendInvite()
 
-  const roleSelect = page.locator('tbody select').first()
-  await expect(roleSelect).toBeVisible()
+    await expect(page.getByText(/Invitation email sent|Invite sent/)).toBeVisible()
+    await expect(team.firstRoleSelect()).toBeVisible()
+  })
 })
 
-test('manager sees invite rep only without manager role option', async ({ page }) => {
-  await loginAs(page, 'manager')
+test.describe('manager team permissions', () => {
+  test.use({ storageState: storageState.manager })
 
-  await page.locator('nav a[href="/team"]').first().click()
-  await expect(page.getByRole('button', { name: 'Invite rep' })).toBeVisible()
+  test('manager sees invite rep only without manager role option', async ({ page }) => {
+    const team = new TeamPage(page)
+    await page.goto('/')
+    await waitForAppReady(page)
+    await team.goto()
 
-  await page.getByRole('button', { name: 'Invite rep' }).click()
-  await expect(page.getByLabel('Role')).toHaveCount(0)
-  await expect(page.locator('table')).toContainText(users.manager.name)
+    await expect(team.inviteButton(false)).toBeVisible()
+    await team.openInviteForm(false)
+    await expect(team.roleLabel()).toHaveCount(0)
+    await expect(team.table()).toContainText(users.manager.name)
+  })
 })

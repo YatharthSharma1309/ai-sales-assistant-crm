@@ -1,0 +1,40 @@
+{
+  "name": "@crm/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "npm run build --workspace=@crm/shared && tsc",
+    "start": "node dist/index.js",
+    "start:prod": "prisma migrate deploy --schema prisma/schema.postgresql.prisma && node dist/index.js",
+    "db:push": "prisma db push",
+    "db:push:pg": "prisma db push --schema prisma/schema.postgresql.prisma",
+    "db:migrate:deploy": "prisma migrate deploy --schema prisma/schema.postgresql.prisma",
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate",
+    "db:generate:pg": "prisma generate --schema prisma/schema.postgresql.prisma",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@crm/shared": "*",
+    "@prisma/client": "^6.9.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^6.9.0",
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^24.0.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

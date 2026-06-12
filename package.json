@@ -1,0 +1,28 @@
+{
+  "name": "ai-sales-assistant-crm",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "dev:api": "npm run dev --workspace=packages/api",
+    "postinstall": "npm run build:shared",
+    "dev:all": "npm run build:shared && concurrently \"npm run dev:api\" \"npm run dev\"",
+    "build": "npm run build --workspace=apps/web",
+    "build:shared": "npm run build --workspace=packages/shared",
+    "build:api": "npm run build:shared && npm run db:generate:pg --workspace=packages/api && npm run build --workspace=packages/api",
+    "start:api": "npm run db:migrate:deploy --workspace=packages/api && npm run start --workspace=packages/api",
+    "db:push": "npm run db:push --workspace=packages/api",
+    "db:push:pg": "npm run db:push:pg --workspace=packages/api",
+    "db:studio": "npm run db:studio --workspace=packages/api",
+    "test:api": "npm run test --workspace=packages/api",
+    "test:web": "npm run test --workspace=apps/web",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "concurrently": "^9.1.2"
+  }
+}

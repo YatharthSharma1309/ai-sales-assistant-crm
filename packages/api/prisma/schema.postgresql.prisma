@@ -1,0 +1,280 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  REP
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  UNQUALIFIED
+}
+
+enum DealStage {
+  DISCOVERY
+  DEMO_SCHEDULED
+  TRIAL
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  TASK
+}
+
+enum IntegrationProvider {
+  GOOGLE_CALENDAR
+  GMAIL
+  HUBSPOT
+  SALESFORCE
+}
+
+model Organization {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  emailLogToken String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  memberships Membership[]
+  accounts    Account[]
+  contacts    Contact[]
+  leads       Lead[]
+  deals       Deal[]
+  activities   Activity[]
+  integrations Integration[]
+  teamInvites  TeamInvite[]
+}
+
+model User {
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  passwordHash           String
+  name                   String
+  pendingEmail           String?
+  emailChangeTokenHash   String?
+  emailChangeExpiresAt   DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  memberships    Membership[]
+  activities     Activity[] @relation("ActivityCreator")
+  assignedLeads  Lead[]         @relation("LeadAssignee")
+  assignedDeals  Deal[]         @relation("DealAssignee")
+  integrations   Integration[]
+  sessions       AuthSession[]
+  invitesSent    TeamInvite[] @relation("InvitesSent")
+}
+
+model AuthSession {
+  id             String    @id @default(cuid())
+  userId         String
+  tokenHash      String    @unique
+  organizationId String?
+  role           String?
+  userAgent      String?
+  ipAddress      String?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  lastUsedAt     DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, revokedAt])
+}
+
+model TeamInvite {
+  id             String    @id @default(cuid())
+  organizationId String
+  email          String
+  name           String?
+  role           Role      @default(REP)
+  tokenHash      String    @unique
+  invitedById    String
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("InvitesSent", fields: [invitedById], references: [id])
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([email])
+}
+
+model Membership {
+  id             String   @id @default(cuid())
+  role           Role     @default(REP)
+  organizationId String
+  userId         String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+}
+
+model Account {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  industry       String?
+  companySize    String?
+  website        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts     Contact[]
+  deals        Deal[]
+
+  @@index([organizationId])
+}
+
+model Contact {
+  id             String   @id @default(cuid())
+  organizationId String
+  accountId      String?
+  firstName      String
+  lastName       String
+  email          String?
+  jobTitle       String?
+  phone          String?
+  externalSource String?
+  externalId     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  leads        Lead[]
+  deals        Deal[]
+  activities   Activity[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@unique([organizationId, externalSource, externalId])
+}
+
+model Lead {
+  id             String     @id @default(cuid())
+  organizationId String
+  contactId      String?
+  assignedToId   String?
+  title          String
+  status         LeadStatus @default(NEW)
+  source         String?
+  notes          String?
+  score          Int        @default(0)
+  scoreUpdatedAt DateTime?
+  externalSource String?
+  externalId     String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  assignedTo   User?        @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  activities   Activity[]
+
+  @@index([organizationId])
+  @@index([organizationId, assignedToId])
+  @@index([organizationId, score])
+  @@unique([organizationId, externalSource, externalId])
+}
+
+model Deal {
+  id             String    @id @default(cuid())
+  organizationId String
+  contactId      String?
+  accountId      String?
+  assignedToId   String?
+  title          String
+  stage          DealStage @default(DISCOVERY)
+  mrr            Float?
+  arr            Float?
+  probability    Int       @default(20)
+  closeDate      DateTime?
+  externalSource String?
+  externalId     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  account      Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  assignedTo   User?        @relation("DealAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  activities   Activity[]
+
+  @@index([organizationId])
+  @@index([organizationId, assignedToId])
+  @@unique([organizationId, externalSource, externalId])
+}
+
+model Activity {
+  id                String       @id @default(cuid())
+  organizationId    String
+  contactId         String?
+  leadId            String?
+  dealId            String?
+  createdById       String?
+  googleEventId     String?
+  externalMessageId String?
+  type           ActivityType
+  title          String
+  body           String?
+  dueAt          DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  deal         Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  createdBy    User?        @relation("ActivityCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@unique([organizationId, googleEventId])
+  @@unique([organizationId, externalMessageId])
+}
+
+model Integration {
+  id             String              @id @default(cuid())
+  organizationId String
+  userId         String
+  provider       IntegrationProvider
+  accessToken    String
+  refreshToken   String?
+  expiresAt      DateTime?
+  metadata       Json?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, provider])
+}

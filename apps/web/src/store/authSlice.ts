@@ -567,7 +567,13 @@ const authSlice = createSlice({
         state.error = null
       })
 
-      .addCase(fetchMe.pending, pending)
+      .addCase(fetchMe.pending, (state) => {
+        // Only block the UI during initial session bootstrap — not background sync
+        if (!state.sessionChecked) {
+          state.loading = true
+          state.error = null
+        }
+      })
 
       .addCase(fetchMe.fulfilled, (state, action) => {
 

@@ -21,6 +21,33 @@ describe('authSlice session handling', () => {
     }
   })
 
+  it('fetchMe.pending does not set loading after session is checked', () => {
+    const state = authReducer(
+      {
+        user: { id: 'u1', name: 'Test', email: 't@test.com' },
+        organization: { id: 'o1', name: 'Org', slug: 'org' },
+        role: 'ADMIN',
+        organizations: [],
+        loading: false,
+        error: null,
+        sessionChecked: true,
+      },
+      { type: fetchMe.pending.type, meta: { requestId: 'test', arg: undefined } },
+    )
+
+    expect(state.loading).toBe(false)
+  })
+
+  it('fetchMe.pending sets loading during initial bootstrap', () => {
+    const state = authReducer(
+      undefined,
+      { type: fetchMe.pending.type, meta: { requestId: 'test', arg: undefined } },
+    )
+
+    expect(state.loading).toBe(true)
+    expect(state.sessionChecked).toBe(false)
+  })
+
   it('fetchMe.fulfilled sets user and sessionChecked', () => {
     const state = authReducer(
       undefined,

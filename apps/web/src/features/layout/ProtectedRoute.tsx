@@ -30,6 +30,7 @@ export function ProtectedRoute() {
     void dispatch(restoreSession())
   }, [dispatch, token, sessionChecked])
 
+  // Bootstrap only: background fetchMe (e.g. useSyncRole) must not unmount the shell
   if (!sessionChecked) {
     return <SessionSpinner />
   }

@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { expect, test as setup } from '@playwright/test'
+import { expect, request, test as setup } from '@playwright/test'
 import { authDir, storageState } from '../../fixtures/auth'
 import { orgName, users } from '../../fixtures/users'
 
@@ -90,26 +90,46 @@ for (const role of ['admin', 'manager', 'rep'] as const) {
     fs.mkdirSync(authDir, { recursive: true })
     const user = users[role]
 
-    const response = await login(user.email, user.password)
-    expect(response.ok).toBeTruthy()
-    const body = (await response.json()) as {
-      accessToken?: string
-      token?: string
-    }
-    const accessToken = body.accessToken ?? body.token
-    expect(accessToken).toBeTruthy()
+    // Login via web origin so httpOnly crm_refresh is scoped to localhost:5174
+    const webContext = await request.newContext({ baseURL: WEB_ORIGIN })
+    try {
+      const response = await webContext.post('/api/auth/login', {
+        data: { email: user.email, password: user.password },
+      })
+      expect(response.ok()).toBeTruthy()
 
-    fs.writeFileSync(
-      storageState[role],
-      JSON.stringify({
-        cookies: [],
-        origins: [
+      const body = (await response.json()) as {
+        accessToken?: string
+        token?: string
+      }
+      const accessToken = body.accessToken ?? body.token
+      expect(accessToken).toBeTruthy()
+
+      const webState = await webContext.storageState()
+      expect(
+        webState.cookies.some((cookie) => cookie.name === 'crm_refresh'),
+      ).toBeTruthy()
+
+      fs.writeFileSync(
+        storageState[role],
+        JSON.stringify(
           {
-            origin: WEB_ORIGIN,
-            localStorage: [{ name: 'crm_access_token', value: accessToken }],
+            cookies: webState.cookies,
+            origins: [
+              {
+                origin: WEB_ORIGIN,
+                localStorage: [
+                  { name: 'crm_access_token', value: accessToken },
+                ],
+              },
+            ],
           },
-        ],
-      }),
-    )
+          null,
+          2,
+        ),
+      )
+    } finally {
+      await webContext.dispose()
+    }
   })
 }

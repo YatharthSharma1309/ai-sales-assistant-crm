@@ -57,7 +57,9 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm run dev --workspace=apps/web',
+      command: process.env.CI
+        ? `npm run build --workspace=apps/web && npm run preview --workspace=apps/web -- --port ${webPort} --host`
+        : 'npm run dev --workspace=apps/web',
       cwd: root,
       port: Number(webPort),
       reuseExistingServer: false,

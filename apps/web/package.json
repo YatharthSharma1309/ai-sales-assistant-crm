@@ -22,6 +22,8 @@
   "optionalDependencies": {
     "@rolldown/binding-linux-x64-gnu": "1.0.3",
     "@rolldown/binding-win32-x64-msvc": "1.0.3",
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.0",
+    "@tailwindcss/oxide-win32-x64-msvc": "4.3.0",
     "lightningcss-linux-x64-gnu": "1.32.0",
     "lightningcss-win32-x64-msvc": "1.32.0"
   },

@@ -15,7 +15,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npm install @rolldown/binding-linux-x64-gnu@1.0.3 --workspace=apps/web --no-save
+      - run: npm install @rolldown/binding-linux-x64-gnu@1.0.3 lightningcss-linux-x64-gnu@1.32.0 @tailwindcss/oxide-linux-x64-gnu@4.3.0 --workspace=apps/web --no-save
       - run: npm run build:shared
       - run: npm run db:generate --workspace=packages/api
       - run: npm run test:api
@@ -31,7 +31,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npm install @rolldown/binding-linux-x64-gnu@1.0.3 lightningcss-linux-x64-gnu@1.32.0 --workspace=apps/web --no-save
+      - run: npm install @rolldown/binding-linux-x64-gnu@1.0.3 lightningcss-linux-x64-gnu@1.32.0 @tailwindcss/oxide-linux-x64-gnu@4.3.0 --workspace=apps/web --no-save
       - run: npm run build:shared
       - run: npm run db:generate --workspace=packages/api
       - run: npx playwright install chromium --with-deps

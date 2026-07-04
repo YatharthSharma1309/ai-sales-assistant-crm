@@ -22,7 +22,7 @@ CRM for B2B SaaS sales teams with lead management, pipeline tracking, AI-powered
 - **Paginated lists** — Accounts, contacts, leads, deals, and activities use `{ data, pagination }`
 
 ### AI & communications
-- **AI emails** — Context-aware drafts from leads/deals (OpenAI or mock mode)
+- **AI emails** — Context-aware drafts from leads/deals (OpenRouter or mock mode)
 - **Meeting summaries** — AI summaries from pasted notes; action items as tasks
 - **Email send** — Resend integration from AI drafts (optional)
 - **BCC email logging** — Outbound emails auto-BCC a workspace address; inbound webhook logs to timeline
@@ -137,7 +137,7 @@ See `packages/api/.env.example` for the full list. Key groups:
 | Group | Variables |
 |-------|-----------|
 | **Core** | `DATABASE_URL`, `JWT_SECRET`, `REFRESH_TOKEN_TTL_DAYS`, `REFRESH_TOKEN_ABSOLUTE_TTL_DAYS`, `INVITE_EXPIRY_HOURS`, `PORT`, `FRONTEND_URL`, `CORS_ORIGINS`, `TRUST_PROXY`, `REFRESH_COOKIE_SAME_SITE` |
-| **AI & email** | `OPENAI_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL` |
+| **AI & email** | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL` |
 | **BCC logging** | `EMAIL_LOG_DOMAIN`, `INBOUND_EMAIL_WEBHOOK_SECRET` |
 | **Google** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` |
 | **Gmail** | `GMAIL_REDIRECT_URI`, `GMAIL_SYNC_ENABLED`, `GMAIL_SYNC_INTERVAL_MS` |
@@ -145,7 +145,7 @@ See `packages/api/.env.example` for the full list. Key groups:
 | **Webhooks** | `API_PUBLIC_URL` (required for HubSpot signature verification in prod) |
 | **Calendar sync** | `CALENDAR_SYNC_ENABLED`, `CALENDAR_SYNC_INTERVAL_MS`, `CRON_SECRET` |
 
-Without OpenAI, AI endpoints use mock mode. Without Resend, use **Copy** on email drafts.
+Without OpenRouter, AI endpoints use mock mode. Without Resend, use **Copy** on email drafts.
 
 ## API routes
 

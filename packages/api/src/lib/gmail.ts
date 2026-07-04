@@ -1,4 +1,8 @@
 import { prisma } from './prisma.js'
+import {
+  getGoogleOAuthConfigForOrg,
+  type GoogleOAuthConfig,
+} from './googleOAuth.js'
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -25,32 +29,13 @@ export type GmailMessage = {
   body: string
 }
 
-function getGoogleConfig() {
-  const clientId = process.env.GOOGLE_CLIENT_ID
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  const redirectUri =
-    process.env.GMAIL_REDIRECT_URI ??
-    process.env.GOOGLE_REDIRECT_URI?.replace(
-      '/google/callback',
-      '/gmail/callback',
-    ) ??
-    'http://localhost:3001/api/integrations/gmail/callback'
-
-  if (!clientId || !clientSecret) return null
-  return { clientId, clientSecret, redirectUri }
-}
-
-export function isGmailConfigured(): boolean {
-  return getGoogleConfig() !== null
-}
-
-export function buildGmailAuthUrl(state: string): string | null {
-  const config = getGoogleConfig()
-  if (!config) return null
-
+export function buildGmailAuthUrl(
+  state: string,
+  config: GoogleOAuthConfig,
+): string {
   const params = new URLSearchParams({
     client_id: config.clientId,
-    redirect_uri: config.redirectUri,
+    redirect_uri: config.gmailRedirectUri,
     response_type: 'code',
     scope: SCOPES,
     access_type: 'offline',
@@ -61,10 +46,10 @@ export function buildGmailAuthUrl(state: string): string | null {
   return `${GOOGLE_AUTH_URL}?${params}`
 }
 
-export async function exchangeGmailCode(code: string): Promise<GoogleTokens> {
-  const config = getGoogleConfig()
-  if (!config) throw new Error('Gmail OAuth not configured')
-
+export async function exchangeGmailCode(
+  code: string,
+  config: GoogleOAuthConfig,
+): Promise<GoogleTokens> {
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -72,7 +57,7 @@ export async function exchangeGmailCode(code: string): Promise<GoogleTokens> {
       code,
       client_id: config.clientId,
       client_secret: config.clientSecret,
-      redirect_uri: config.redirectUri,
+      redirect_uri: config.gmailRedirectUri,
       grant_type: 'authorization_code',
     }),
   })
@@ -84,10 +69,10 @@ export async function exchangeGmailCode(code: string): Promise<GoogleTokens> {
   return response.json() as Promise<GoogleTokens>
 }
 
-async function refreshGmailToken(refreshToken: string): Promise<GoogleTokens> {
-  const config = getGoogleConfig()
-  if (!config) throw new Error('Gmail OAuth not configured')
-
+async function refreshGmailToken(
+  refreshToken: string,
+  config: GoogleOAuthConfig,
+): Promise<GoogleTokens> {
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -114,6 +99,11 @@ export async function getValidGmailAccessToken(
   })
   if (!integration) throw new Error('Integration not found')
 
+  const config = await getGoogleOAuthConfigForOrg(integration.organizationId)
+  if (!config) {
+    throw new Error('Gmail OAuth not configured for this workspace')
+  }
+
   const stillValid =
     integration.expiresAt &&
     integration.expiresAt.getTime() > Date.now() + 60_000
@@ -124,7 +114,7 @@ export async function getValidGmailAccessToken(
     throw new Error('Gmail token expired — reconnect inbox')
   }
 
-  const tokens = await refreshGmailToken(integration.refreshToken)
+  const tokens = await refreshGmailToken(integration.refreshToken, config)
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000)
 
   await prisma.integration.update({

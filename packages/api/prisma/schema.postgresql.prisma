@@ -46,12 +46,14 @@ enum IntegrationProvider {
 }
 
 model Organization {
-  id            String   @id @default(cuid())
-  name          String
-  slug          String   @unique
-  emailLogToken String?  @unique
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  name               String
+  slug               String   @unique
+  emailLogToken      String?  @unique
+  googleClientId     String?
+  googleClientSecret String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   memberships Membership[]
   accounts    Account[]

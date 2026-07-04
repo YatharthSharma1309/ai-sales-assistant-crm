@@ -1,4 +1,8 @@
 import { prisma } from './prisma.js'
+import {
+  getGoogleOAuthConfigForOrg,
+  type GoogleOAuthConfig,
+} from './googleOAuth.js'
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -24,31 +28,13 @@ export type CalendarEvent = {
   htmlLink?: string
 }
 
-function getGoogleConfig() {
-  const clientId = process.env.GOOGLE_CLIENT_ID
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  const redirectUri =
-    process.env.GOOGLE_REDIRECT_URI ??
-    'http://localhost:3001/api/integrations/google/callback'
-
-  if (!clientId || !clientSecret) {
-    return null
-  }
-
-  return { clientId, clientSecret, redirectUri }
-}
-
-export function isGoogleCalendarConfigured(): boolean {
-  return getGoogleConfig() !== null
-}
-
-export function buildGoogleAuthUrl(state: string): string | null {
-  const config = getGoogleConfig()
-  if (!config) return null
-
+export function buildGoogleAuthUrl(
+  state: string,
+  config: GoogleOAuthConfig,
+): string {
   const params = new URLSearchParams({
     client_id: config.clientId,
-    redirect_uri: config.redirectUri,
+    redirect_uri: config.calendarRedirectUri,
     response_type: 'code',
     scope: SCOPES,
     access_type: 'offline',
@@ -61,10 +47,8 @@ export function buildGoogleAuthUrl(state: string): string | null {
 
 export async function exchangeGoogleCode(
   code: string,
+  config: GoogleOAuthConfig,
 ): Promise<GoogleTokens> {
-  const config = getGoogleConfig()
-  if (!config) throw new Error('Google Calendar not configured')
-
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -72,7 +56,7 @@ export async function exchangeGoogleCode(
       code,
       client_id: config.clientId,
       client_secret: config.clientSecret,
-      redirect_uri: config.redirectUri,
+      redirect_uri: config.calendarRedirectUri,
       grant_type: 'authorization_code',
     }),
   })
@@ -86,10 +70,8 @@ export async function exchangeGoogleCode(
 
 export async function refreshGoogleToken(
   refreshToken: string,
+  config: GoogleOAuthConfig,
 ): Promise<GoogleTokens> {
-  const config = getGoogleConfig()
-  if (!config) throw new Error('Google Calendar not configured')
-
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -117,6 +99,11 @@ export async function getValidAccessToken(
 
   if (!integration) throw new Error('Integration not found')
 
+  const config = await getGoogleOAuthConfigForOrg(integration.organizationId)
+  if (!config) {
+    throw new Error('Google OAuth not configured for this workspace')
+  }
+
   const stillValid =
     integration.expiresAt &&
     integration.expiresAt.getTime() > Date.now() + 60_000
@@ -127,7 +114,7 @@ export async function getValidAccessToken(
     throw new Error('Google token expired — reconnect calendar')
   }
 
-  const tokens = await refreshGoogleToken(integration.refreshToken)
+  const tokens = await refreshGoogleToken(integration.refreshToken, config)
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000)
 
   await prisma.integration.update({

@@ -40,6 +40,16 @@ function isSessionActive(session: {
   )
 }
 
+/** Returns false if session was revoked or expired (used for access JWT sid checks). */
+export async function isAccessSessionValid(sessionId: string): Promise<boolean> {
+  const session = await prisma.authSession.findUnique({
+    where: { id: sessionId },
+    select: { revokedAt: true, expiresAt: true, absoluteExpiresAt: true },
+  })
+  if (!session) return false
+  return isSessionActive(session)
+}
+
 export type SessionTokens = {
   accessToken: string
   refreshToken: string

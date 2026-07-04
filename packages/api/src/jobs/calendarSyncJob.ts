@@ -1,5 +1,5 @@
 import { syncAllGoogleCalendars } from '../lib/calendarSync.js'
-import { isGoogleCalendarConfigured } from '../lib/googleCalendar.js'
+import { isAnyGoogleOAuthConfigured } from '../lib/googleOAuth.js'
 
 let intervalId: ReturnType<typeof setInterval> | null = null
 let running = false
@@ -17,7 +17,7 @@ export function getCalendarSyncConfig() {
 }
 
 async function runSync() {
-  if (running || !isGoogleCalendarConfigured()) return
+  if (running || !(await isAnyGoogleOAuthConfigured())) return
 
   running = true
   try {
@@ -49,19 +49,21 @@ export function startCalendarSyncJob() {
     return
   }
 
-  if (!isGoogleCalendarConfigured()) {
-    console.log('[calendar-sync] skipped — Google OAuth not configured')
-    return
-  }
+  void (async () => {
+    if (!(await isAnyGoogleOAuthConfigured())) {
+      console.log('[calendar-sync] skipped — Google OAuth not configured')
+      return
+    }
 
-  console.log(
-    `[calendar-sync] auto-sync every ${Math.round(intervalMs / 60_000)} minute(s)`,
-  )
+    console.log(
+      `[calendar-sync] auto-sync every ${Math.round(intervalMs / 60_000)} minute(s)`,
+    )
 
-  void runSync()
-  intervalId = setInterval(() => {
     void runSync()
-  }, intervalMs)
+    intervalId = setInterval(() => {
+      void runSync()
+    }, intervalMs)
+  })()
 }
 
 export function stopCalendarSyncJob() {

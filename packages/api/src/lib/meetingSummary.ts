@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { openRouterChatCompletion } from './openRouter.js'
 
 export const meetingSummaryResultSchema = z.object({
   summary: z.string(),
@@ -62,48 +63,30 @@ export function buildMockMeetingSummary(
   }
 }
 
-export async function generateMeetingSummaryWithOpenAI(
+export async function generateMeetingSummaryWithAI(
   transcript: string,
   title: string | undefined,
   context: Record<string, unknown>,
-  apiKey: string,
 ): Promise<MeetingSummaryResult> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You analyze B2B SaaS sales call notes/transcripts.
+  const content = await openRouterChatCompletion(
+    [
+      {
+        role: 'system',
+        content: `You analyze B2B SaaS sales call notes/transcripts.
 Return JSON with keys: summary (string), painPoints (string[]), objections (string[]), nextSteps (string[]), actionItems (array of {title, dueInDays}), suggestedFollowUpAngle (string).
 Keep actionItems concrete and assign dueInDays 1-14.`,
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({ title, transcript, context }),
-        },
-      ],
-      response_format: { type: 'json_object' },
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(`OpenAI error: ${response.status}`)
-  }
-
-  const data = (await response.json()) as {
-    choices: { message: { content: string } }[]
-  }
-  const parsed = meetingSummaryResultSchema.safeParse(
-    JSON.parse(data.choices[0].message.content),
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({ title, transcript, context }),
+      },
+    ],
+    { jsonMode: true },
   )
+
+  const parsed = meetingSummaryResultSchema.safeParse(JSON.parse(content))
   if (!parsed.success) {
-    throw new Error('Invalid meeting summary response from OpenAI')
+    throw new Error('Invalid meeting summary response from OpenRouter')
   }
   return parsed.data
 }

@@ -18,7 +18,110 @@ Local dev: `npm run dev:all` with SQLite (`packages/api/prisma/schema.prisma`).
 
 ---
 
-## Option A — Railway + Vercel (recommended)
+## First deploy walkthrough (Railway + Vercel)
+
+Repo: [github.com/YatharthSharma1309/ai-sales-assistant-crm](https://github.com/YatharthSharma1309/ai-sales-assistant-crm)
+
+### Step 0 — Push latest code
+
+Commit and push your branch so Railway/Vercel build the current app (including production checks and encrypted Google OAuth).
+
+```bash
+git add -A
+git commit -m "Production deploy: security hardening, OpenRouter, workspace Google OAuth"
+git push origin master
+```
+
+### Step 1 — Generate secrets (local only)
+
+```bash
+npm run generate:deploy-secrets
+```
+
+Save the output in a password manager. You will paste these into Railway — double-check you do **not** commit them.
+
+Also have ready (from your local `packages/api/.env`, server-only):
+
+- `OPENROUTER_API_KEY` — copy to Railway only; rotate if it was ever exposed
+
+### Step 2 — Railway: API + PostgreSQL
+
+1. Open [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → select `ai-sales-assistant-crm`.
+2. **+ New** → **Database** → **PostgreSQL**. Open the DB service → **Connect** → copy `DATABASE_URL` (or use **Variable Reference** from the API service).
+3. Click the **API service** (not the DB) → **Settings**:
+   - **Root directory:** leave as repo root (`.`)
+   - Build/start come from `railway.toml` (`npm ci && npm run build:api` → `npm run start:api`)
+4. **Variables** → add (replace placeholders after you have URLs):
+
+| Variable | Value |
+|----------|--------|
+| `NODE_ENV` | `production` |
+| `DATABASE_URL` | Reference from PostgreSQL plugin, or paste connection string |
+| `JWT_SECRET` | From `npm run generate:deploy-secrets` |
+| `SECRETS_ENCRYPTION_KEY` | From generator |
+| `INBOUND_EMAIL_WEBHOOK_SECRET` | From generator |
+| `TRUST_PROXY` | `1` |
+| `REFRESH_COOKIE_SAME_SITE` | `none` |
+| `FRONTEND_URL` | `https://YOUR-APP.vercel.app` (update after Step 3) |
+| `API_PUBLIC_URL` | `https://YOUR-API.up.railway.app` (after Step 2f) |
+| `OPENROUTER_API_KEY` | Your OpenRouter key |
+| `OPENROUTER_MODEL` | `meta-llama/llama-3.3-70b-instruct:free` |
+| `CORS_ORIGINS` | Optional: `https://YOUR-APP.vercel.app,https://YOUR-APP-*.vercel.app` |
+
+Leave `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` **empty** — configure Google on **Integrations** in the app.
+
+5. **Settings** → **Networking** → **Generate domain** → copy URL (e.g. `https://ai-sales-assistant-crm-production.up.railway.app`).
+6. Set `API_PUBLIC_URL` to that exact URL (no trailing slash).
+7. **Deploy** → wait for build → open `https://YOUR-API.up.railway.app/api/health` → expect `{"status":"ok",...}`.
+
+If the service crashes on start, open **Deploy logs**. Common fixes:
+
+- `Production environment misconfigured` → add every variable from the Security table below
+- `migrate deploy` failed → check `DATABASE_URL` points at PostgreSQL
+
+### Step 3 — Vercel: frontend
+
+1. [vercel.com](https://vercel.com) → **Add New** → **Project** → import `ai-sales-assistant-crm`.
+2. **Root Directory:** `apps/web`
+3. **Framework Preset:** Vite
+4. **Build & Development Settings** (override for monorepo):
+
+| Setting | Value |
+|---------|--------|
+| Install Command | `cd ../.. && npm install` |
+| Build Command | `cd ../.. && npm run build --workspace=apps/web` |
+| Output Directory | `dist` |
+
+5. **Environment Variables:**
+
+| Name | Value |
+|------|--------|
+| `VITE_API_URL` | Your Railway API URL (no trailing slash) |
+
+6. **Deploy**. Copy the production URL (e.g. `https://ai-sales-assistant-crm.vercel.app`).
+7. Back on **Railway** → update `FRONTEND_URL` to that Vercel URL → redeploy API.
+
+### Step 4 — Smoke test
+
+1. Open your Vercel URL → **Register** a new workspace.
+2. Sign in → create a lead and deal.
+3. **Integrations** → (optional) paste Google OAuth Client ID + Secret → connect Calendar/Gmail.
+4. Try **AI email draft** (uses OpenRouter if key is set).
+
+### Step 5 — Google OAuth redirect URIs (when ready)
+
+In [Google Cloud Console](https://console.cloud.google.com/) → your OAuth client → **Authorized redirect URIs**, add:
+
+```
+https://YOUR-API.up.railway.app/api/integrations/google/callback
+https://YOUR-API.up.railway.app/api/integrations/gmail/callback
+```
+
+Use the redirect URIs shown on **Integrations** in the app (they match `API_PUBLIC_URL`).
+
+---
+
+## Option A — Railway + Vercel (reference)
 
 ### 1. Database & migrations
 
@@ -175,12 +278,32 @@ npm run preview --workspace=apps/web
 
 ## Environment checklist
 
+### Security (production)
+
+The API validates required settings on startup when `NODE_ENV=production`. If anything is missing, the process exits with a clear error instead of running in an insecure state.
+
+| Variable | Description |
+|----------|-------------|
+| `NODE_ENV` | Set to `production` on Railway/Render |
+| `SECRETS_ENCRYPTION_KEY` | 32-byte key (64 hex chars). Encrypts workspace Google OAuth secrets in the database. Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `INBOUND_EMAIL_WEBHOOK_SECRET` | Random string for `POST /api/communications/inbound` (required even if you do not use email logging yet) |
+
+**Never commit or expose:**
+
+- `packages/api/.env` (gitignored) — local secrets only
+- Server keys: `JWT_SECRET`, `OPENROUTER_API_KEY`, `RESEND_API_KEY`, HubSpot/Google env fallbacks, `SECRETS_ENCRYPTION_KEY`
+- On Vercel, only set **`VITE_*`** variables. They are embedded in the browser bundle — use **`VITE_API_URL`** only (no API keys in the frontend)
+
+**Workspace Google OAuth:** Managers configure Client ID + Secret on **Integrations** in the app. Secrets are encrypted at rest when `SECRETS_ENCRYPTION_KEY` is set. You do **not** need `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in Railway unless you want a global env fallback.
+
+**Rotate keys** if they were ever pasted into chat, logs, or a screenshot.
+
 ### Required
 
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Long random string for auth tokens |
+| `JWT_SECRET` | At least 32 random characters (not `change-me` or `dev-secret`) |
 | `REFRESH_TOKEN_TTL_DAYS` | Sliding inactivity window for refresh sessions (default `30`) |
 | `REFRESH_TOKEN_ABSOLUTE_TTL_DAYS` | Maximum session lifetime from first sign-in (default `90`) |
 | `INVITE_EXPIRY_HOURS` | Team invite link lifetime (default `168` = 7 days) |
@@ -195,7 +318,8 @@ npm run preview --workspace=apps/web
 
 | Variable | Description |
 |----------|-------------|
-| `OPENAI_API_KEY` | Optional — mock mode without it |
+| `OPENROUTER_API_KEY` | Optional — mock mode without it; get a key at [openrouter.ai](https://openrouter.ai) |
+| `OPENROUTER_MODEL` | Optional — defaults to `meta-llama/llama-3.3-70b-instruct:free`; browse models at openrouter.ai/models |
 | `RESEND_API_KEY` | Optional — email send |
 | `RESEND_FROM_EMAIL` | Verified sender in Resend |
 | `EMAIL_LOG_DOMAIN` | Domain for BCC addresses (e.g. `inbound.yourdomain.com`) |
@@ -203,10 +327,14 @@ npm run preview --workspace=apps/web
 
 ### Google (Calendar + Gmail)
 
+**Recommended:** Leave server env empty and let each workspace admin set OAuth credentials on **Integrations → Google Calendar & Gmail** (encrypted at rest with `SECRETS_ENCRYPTION_KEY`).
+
+Optional global fallback env vars:
+
 | Variable | Description |
 |----------|-------------|
-| `GOOGLE_CLIENT_ID` | Google Cloud OAuth client |
-| `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth secret |
+| `GOOGLE_CLIENT_ID` | Google Cloud OAuth client (optional fallback) |
+| `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth secret (optional fallback) |
 | `GOOGLE_REDIRECT_URI` | `https://YOUR_API_URL/api/integrations/google/callback` |
 | `GMAIL_REDIRECT_URI` | `https://YOUR_API_URL/api/integrations/gmail/callback` |
 | `GMAIL_SYNC_ENABLED` | `true` for auto inbox sync |
@@ -241,7 +369,7 @@ npm run preview --workspace=apps/web
 6. Connect Google Calendar → Sync → check timeline for meetings.
 7. (Optional) Connect HubSpot OAuth → Sync → verify contacts/deals import.
 8. (Optional) Connect Gmail → Sync inbox → check email activities.
-9. Generate an AI email draft (works in mock mode without OpenAI).
+9. Generate an AI email draft (works in mock mode without OpenRouter).
 
 ---
 

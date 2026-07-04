@@ -1,20 +1,22 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { protectedMiddleware } from '../lib/auth.js'
+import { aiLimiter } from '../middleware/rateLimit.js'
 import { prisma } from '../lib/prisma.js'
 import {
   buildEmailContextFromDeal,
   buildEmailContextFromLead,
   buildMockEmail,
-  generateEmailWithOpenAI,
+  generateEmailWithAI,
   type EmailContext,
 } from '../lib/emailContext.js'
 import {
   buildMockMeetingSummary,
   formatMeetingActivityBody,
-  generateMeetingSummaryWithOpenAI,
+  generateMeetingSummaryWithAI,
   meetingSummaryResultSchema,
 } from '../lib/meetingSummary.js'
+import { isOpenRouterConfigured } from '../lib/openRouter.js'
 import {
   assertDealAccess,
   assertLeadAccess,
@@ -24,6 +26,7 @@ import { assertContactInOrg, handleOrgValidationError } from '../lib/orgValidati
 
 const router = Router()
 router.use(protectedMiddleware)
+router.use(aiLimiter)
 
 const exclusiveIdRefine = {
   refine: (data: { leadId?: string; dealId?: string }) =>
@@ -161,24 +164,23 @@ router.post('/generate-email', async (req, res) => {
       }
     }
 
-    const apiKey = process.env.OPENAI_API_KEY
     let subject: string
     let body: string
     let source: string
     let message: string | undefined
 
-    if (!apiKey) {
+    if (!isOpenRouterConfigured()) {
       const mock = buildMockEmail(context, goal)
       subject = mock.subject
       body = mock.body
       source = 'mock'
-      message = 'Set OPENAI_API_KEY for AI-generated drafts'
+      message = 'Set OPENROUTER_API_KEY for AI-generated drafts'
     } else {
       try {
-        const result = await generateEmailWithOpenAI(context, tone, goal, apiKey)
+        const result = await generateEmailWithAI(context, tone, goal)
         subject = result.subject
         body = result.body
-        source = 'openai'
+        source = 'openrouter'
       } catch (error) {
         const mock = buildMockEmail(context, goal)
         subject = mock.subject
@@ -186,8 +188,8 @@ router.post('/generate-email', async (req, res) => {
         source = 'mock'
         message =
           error instanceof Error
-            ? `OpenAI unavailable (${error.message}); using template draft`
-            : 'OpenAI unavailable; using template draft'
+            ? `OpenRouter unavailable (${error.message}); using template draft`
+            : 'OpenRouter unavailable; using template draft'
       }
     }
 
@@ -316,31 +318,29 @@ router.post('/summarize-meeting', async (req, res) => {
       return
     }
 
-    const apiKey = process.env.OPENAI_API_KEY
     let result
     let source: string
     let message: string | undefined
 
-    if (!apiKey) {
+    if (!isOpenRouterConfigured()) {
       result = buildMockMeetingSummary(transcript, title)
       source = 'mock'
-      message = 'Set OPENAI_API_KEY for AI-generated summaries'
+      message = 'Set OPENROUTER_API_KEY for AI-generated summaries'
     } else {
       try {
-        result = await generateMeetingSummaryWithOpenAI(
+        result = await generateMeetingSummaryWithAI(
           transcript,
           title,
           links?.context ?? {},
-          apiKey,
         )
-        source = 'openai'
+        source = 'openrouter'
       } catch (error) {
         result = buildMockMeetingSummary(transcript, title)
         source = 'mock'
         message =
           error instanceof Error
-            ? `OpenAI unavailable (${error.message}); using template summary`
-            : 'OpenAI unavailable; using template summary'
+            ? `OpenRouter unavailable (${error.message}); using template summary`
+            : 'OpenRouter unavailable; using template summary'
       }
     }
 

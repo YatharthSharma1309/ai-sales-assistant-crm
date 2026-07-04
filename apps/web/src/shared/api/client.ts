@@ -1,19 +1,31 @@
-const ACCESS_TOKEN_KEY = 'crm_access_token'
+/** In-memory only — not persisted to localStorage (XSS mitigation). */
+let accessToken: string | null = null
+
+const LEGACY_ACCESS_KEY = 'crm_access_token'
 const LEGACY_REFRESH_KEY = 'crm_refresh_token'
 const LEGACY_TOKEN_KEY = 'crm_token'
 
+function clearLegacyStorage(): void {
+  if (typeof localStorage === 'undefined') return
+  localStorage.removeItem(LEGACY_ACCESS_KEY)
+  localStorage.removeItem(LEGACY_REFRESH_KEY)
+  localStorage.removeItem(LEGACY_TOKEN_KEY)
+}
+
+/** One-time migration: move any legacy localStorage token into memory, then wipe storage. */
 function migrateLegacyToken(): string | null {
-  const legacy = localStorage.getItem(LEGACY_TOKEN_KEY)
-  if (legacy) {
-    localStorage.setItem(ACCESS_TOKEN_KEY, legacy)
-    localStorage.removeItem(LEGACY_TOKEN_KEY)
-    return legacy
-  }
-  return null
+  if (typeof localStorage === 'undefined') return null
+  const legacy =
+    localStorage.getItem(LEGACY_ACCESS_KEY) ??
+    localStorage.getItem(LEGACY_TOKEN_KEY)
+  if (!legacy) return null
+  accessToken = legacy
+  clearLegacyStorage()
+  return legacy
 }
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_TOKEN_KEY) ?? migrateLegacyToken()
+  return accessToken ?? migrateLegacyToken()
 }
 
 /** @deprecated Refresh tokens are stored in httpOnly cookies */
@@ -26,14 +38,9 @@ export function getToken(): string | null {
   return getAccessToken()
 }
 
-export function setTokens(accessToken: string | null) {
-  if (accessToken) {
-    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
-    localStorage.removeItem(LEGACY_TOKEN_KEY)
-  } else {
-    localStorage.removeItem(ACCESS_TOKEN_KEY)
-    localStorage.removeItem(LEGACY_TOKEN_KEY)
-  }
+export function setTokens(token: string | null) {
+  accessToken = token
+  if (token) clearLegacyStorage()
 }
 
 /** @deprecated Use setTokens */
@@ -42,8 +49,8 @@ export function setToken(token: string | null) {
 }
 
 export function clearTokens() {
-  localStorage.removeItem(LEGACY_REFRESH_KEY)
-  setTokens(null)
+  accessToken = null
+  clearLegacyStorage()
 }
 
 export type ApiErrorBody = {

@@ -19,7 +19,8 @@
     "db:studio": "npm run db:studio --workspace=packages/api",
     "test:api": "npm run test --workspace=packages/api",
     "test:web": "npm run test --workspace=apps/web",
-    "test:e2e": "playwright test -c e2e/playwright.config.ts"
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "generate:deploy-secrets": "node scripts/generate-deploy-secrets.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

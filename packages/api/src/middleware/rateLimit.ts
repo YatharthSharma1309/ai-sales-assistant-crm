@@ -57,3 +57,17 @@ export const changePasswordLimiter = limiter(15 * 60 * 1000, 5, userKey)
 export const logoutAllLimiter = limiter(60 * 60 * 1000, 10, userKey)
 export const teamInviteLimiter = limiter(60 * 60 * 1000, 20, orgKey)
 export const teamResendLimiter = limiter(60 * 60 * 1000, 5, userKey)
+
+/** LLM-backed endpoints — per user to limit cost abuse. */
+export const aiLimiter = limiter(60 * 60 * 1000, 30, userKey)
+
+/** Broad API abuse protection — auth routes have their own stricter limits. */
+export const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  keyGenerator: ipKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => skipInTest || req.path === '/api/health',
+  message: { error: 'Too many requests. Try again later.' },
+})

@@ -1,5 +1,5 @@
 import { syncAllGmailInboxes } from '../lib/gmailSync.js'
-import { isGmailConfigured } from '../lib/gmail.js'
+import { isAnyGoogleOAuthConfigured } from '../lib/googleOAuth.js'
 
 let intervalId: ReturnType<typeof setInterval> | null = null
 let running = false
@@ -15,7 +15,7 @@ export function getGmailSyncConfig() {
 }
 
 async function runSync() {
-  if (running || !isGmailConfigured()) return
+  if (running || !(await isAnyGoogleOAuthConfigured())) return
 
   running = true
   try {
@@ -46,19 +46,21 @@ export function startGmailSyncJob() {
     return
   }
 
-  if (!isGmailConfigured()) {
-    console.log('[gmail-sync] skipped — Google OAuth not configured')
-    return
-  }
+  void (async () => {
+    if (!(await isAnyGoogleOAuthConfigured())) {
+      console.log('[gmail-sync] skipped — Google OAuth not configured')
+      return
+    }
 
-  console.log(
-    `[gmail-sync] auto-sync every ${Math.round(intervalMs / 60_000)} minute(s)`,
-  )
+    console.log(
+      `[gmail-sync] auto-sync every ${Math.round(intervalMs / 60_000)} minute(s)`,
+    )
 
-  void runSync()
-  intervalId = setInterval(() => {
     void runSync()
-  }, intervalMs)
+    intervalId = setInterval(() => {
+      void runSync()
+    }, intervalMs)
+  })()
 }
 
 export async function triggerGmailSyncNow() {

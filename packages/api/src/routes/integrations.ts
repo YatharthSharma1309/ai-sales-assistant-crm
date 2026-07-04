@@ -20,7 +20,6 @@ import {
 import {
   buildGoogleAuthUrl,
   exchangeGoogleCode,
-  isGoogleCalendarConfigured,
 } from '../lib/googleCalendar.js'
 import {
   syncGoogleCalendarForIntegration,
@@ -50,8 +49,13 @@ import { getSalesforceWebhookUrl } from './webhooks.js'
 import {
   buildGmailAuthUrl,
   exchangeGmailCode,
-  isGmailConfigured,
 } from '../lib/gmail.js'
+import {
+  getGoogleOAuthConfigForOrg,
+  getGoogleOAuthSettingsForOrg,
+  isGoogleOAuthConfiguredForOrg,
+} from '../lib/googleOAuth.js'
+import { encryptSecret } from '../lib/secretStore.js'
 import { syncGmailForIntegration } from '../lib/gmailSync.js'
 import { getGmailSyncConfig } from '../jobs/gmailSyncJob.js'
 import crypto from 'crypto'
@@ -72,6 +76,11 @@ const hubspotSchema = z.object({
 const importCsvSchema = z.object({
   type: z.string().min(1),
   csv: z.string().min(1),
+})
+
+const googleOAuthConfigSchema = z.object({
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
 })
 
 function verifyCronSecret(req: { headers: Record<string, unknown> }): boolean {
@@ -98,6 +107,11 @@ router.get('/status', protectedMiddleware, async (req, res) => {
 
   const syncConfig = getCalendarSyncConfig()
   const isManager = isManagerRole(req.auth!.role)
+  const orgId = req.auth!.organizationId
+  const googleOAuth = isManager
+    ? await getGoogleOAuthSettingsForOrg(orgId)
+    : undefined
+  const googleConfigured = await isGoogleOAuthConfiguredForOrg(orgId)
 
   const googleConnected = integrations.some((i) => i.provider === 'GOOGLE_CALENDAR')
   const hubspotConnected = orgIntegrations.some((i) => i.provider === 'HUBSPOT')
@@ -108,21 +122,22 @@ router.get('/status', protectedMiddleware, async (req, res) => {
 
   if (!isManager) {
     res.json({
-      googleCalendar: { connected: googleConnected },
+      googleCalendar: { configured: googleConfigured, connected: googleConnected },
       hubspot: { connected: hubspotConnected },
       salesforce: { connected: salesforceConnected },
-      gmail: { connected: gmailConnected },
+      gmail: { configured: googleConfigured, connected: gmailConnected },
     })
     return
   }
 
   res.json({
     googleCalendar: {
-      configured: isGoogleCalendarConfigured(),
+      configured: googleConfigured,
       connected: googleConnected,
       autoSyncEnabled: syncConfig.enabled,
       autoSyncIntervalMinutes: Math.round(syncConfig.intervalMs / 60_000),
     },
+    googleOAuth,
     hubspot: {
       importAvailable: true,
       oauthConfigured: isHubSpotOAuthConfigured(),
@@ -137,7 +152,7 @@ router.get('/status', protectedMiddleware, async (req, res) => {
       webhookUrl: getSalesforceWebhookUrl(),
     },
     gmail: {
-      configured: isGmailConfigured(),
+      configured: googleConfigured,
       connected: gmailConnected,
       autoSyncEnabled: getGmailSyncConfig().enabled,
     },
@@ -253,15 +268,59 @@ router.post(
   },
 )
 
+router.post(
+  '/google/config',
+  protectedMiddleware,
+  requireRole('ADMIN', 'MANAGER'),
+  async (req, res) => {
+    const parsed = googleOAuthConfigSchema.safeParse(req.body)
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() })
+      return
+    }
+
+    await prisma.organization.update({
+      where: { id: req.auth!.organizationId },
+      data: {
+        googleClientId: parsed.data.clientId.trim(),
+        googleClientSecret: encryptSecret(parsed.data.clientSecret.trim()),
+      },
+    })
+
+    const settings = await getGoogleOAuthSettingsForOrg(req.auth!.organizationId)
+    res.json(settings)
+  },
+)
+
+router.delete(
+  '/google/config',
+  protectedMiddleware,
+  requireRole('ADMIN', 'MANAGER'),
+  async (req, res) => {
+    await prisma.organization.update({
+      where: { id: req.auth!.organizationId },
+      data: {
+        googleClientId: null,
+        googleClientSecret: null,
+      },
+    })
+
+    const settings = await getGoogleOAuthSettingsForOrg(req.auth!.organizationId)
+    res.json(settings)
+  },
+)
+
 router.get(
   '/google/auth-url',
   protectedMiddleware,
   requireRole('ADMIN', 'MANAGER', 'REP'),
-  (req, res) => {
-    if (!isGoogleCalendarConfigured()) {
+  async (req, res) => {
+    const config = await getGoogleOAuthConfigForOrg(req.auth!.organizationId)
+    if (!config) {
       res.status(503).json({
         error: 'Google Calendar not configured',
-        message: 'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET',
+        message:
+          'Add Google OAuth credentials in Integrations or set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server.',
       })
       return
     }
@@ -276,8 +335,7 @@ router.get(
       { expiresIn: '10m' },
     )
 
-    const url = buildGoogleAuthUrl(state)
-    res.json({ url })
+    res.json({ url: buildGoogleAuthUrl(state, config) })
   },
 )
 
@@ -301,7 +359,12 @@ router.get('/google/callback', async (req, res) => {
       throw new Error('Invalid OAuth state')
     }
 
-    const tokens = await exchangeGoogleCode(code)
+    const config = await getGoogleOAuthConfigForOrg(payload.organizationId)
+    if (!config) {
+      throw new Error('Google OAuth not configured')
+    }
+
+    const tokens = await exchangeGoogleCode(code, config)
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000)
 
     await prisma.integration.upsert({
@@ -688,11 +751,13 @@ router.get(
   '/gmail/auth-url',
   protectedMiddleware,
   requireRole('ADMIN', 'MANAGER', 'REP'),
-  (req, res) => {
-    if (!isGmailConfigured()) {
+  async (req, res) => {
+    const config = await getGoogleOAuthConfigForOrg(req.auth!.organizationId)
+    if (!config) {
       res.status(503).json({
         error: 'Gmail not configured',
-        message: 'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET',
+        message:
+          'Add Google OAuth credentials in Integrations or set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server.',
       })
       return
     }
@@ -707,8 +772,7 @@ router.get(
       { expiresIn: '10m' },
     )
 
-    const url = buildGmailAuthUrl(state)
-    res.json({ url })
+    res.json({ url: buildGmailAuthUrl(state, config) })
   },
 )
 
@@ -732,7 +796,12 @@ router.get('/gmail/callback', async (req, res) => {
       throw new Error('Invalid OAuth state')
     }
 
-    const tokens = await exchangeGmailCode(code)
+    const config = await getGoogleOAuthConfigForOrg(payload.organizationId)
+    if (!config) {
+      throw new Error('Gmail OAuth not configured')
+    }
+
+    const tokens = await exchangeGmailCode(code, config)
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000)
 
     await prisma.integration.upsert({

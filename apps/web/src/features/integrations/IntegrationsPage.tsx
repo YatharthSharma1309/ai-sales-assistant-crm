@@ -6,13 +6,23 @@ import { CopyableCode } from '../../shared/components/CopyableCode'
 import { useRole } from '../../shared/hooks/useRole'
 import { api } from '../../shared/api/client'
 
+type GoogleOAuthSettings = {
+  configured: boolean
+  source: 'org' | 'env' | null
+  clientId: string | null
+  hasClientSecret: boolean
+  calendarRedirectUri: string
+  gmailRedirectUri: string
+}
+
 type IntegrationStatus = {
   googleCalendar: {
     configured: boolean
     connected: boolean
-    autoSyncEnabled: boolean
-    autoSyncIntervalMinutes: number
+    autoSyncEnabled?: boolean
+    autoSyncIntervalMinutes?: number
   }
+  googleOAuth?: GoogleOAuthSettings
   hubspot: {
     importAvailable: boolean
     oauthConfigured?: boolean
@@ -74,6 +84,13 @@ export function IntegrationsPage() {
   const [salesforceInstanceUrl, setSalesforceInstanceUrl] = useState('')
   const [salesforceWebhookSecret, setSalesforceWebhookSecret] = useState<string | null>(null)
   const [gmailSyncing, setGmailSyncing] = useState(false)
+  const [googleClientId, setGoogleClientId] = useState('')
+  const [googleClientSecret, setGoogleClientSecret] = useState('')
+  const [googleConfigSaving, setGoogleConfigSaving] = useState(false)
+
+  const canManageIntegrations = isAdmin || isManager
+  const googleConfigured = status?.googleCalendar.configured ?? false
+  const googleOAuth = status?.googleOAuth
 
   const loadStatus = useCallback(async () => {
     try {
@@ -123,6 +140,51 @@ export function IntegrationsPage() {
       setSearchParams({}, { replace: true })
     }
   }, [searchParams, setSearchParams, loadStatus])
+
+  useEffect(() => {
+    if (googleOAuth?.clientId) {
+      setGoogleClientId(googleOAuth.clientId)
+    }
+  }, [googleOAuth?.clientId])
+
+  async function handleGoogleConfigSave(e: FormEvent) {
+    e.preventDefault()
+    setGoogleConfigSaving(true)
+    setMessage(null)
+    setError(null)
+    try {
+      await api<GoogleOAuthSettings>('/api/integrations/google/config', {
+        method: 'POST',
+        body: JSON.stringify({
+          clientId: googleClientId,
+          clientSecret: googleClientSecret,
+        }),
+      })
+      setGoogleClientSecret('')
+      setMessage('Google OAuth credentials saved for this workspace.')
+      loadStatus()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save Google OAuth credentials')
+    } finally {
+      setGoogleConfigSaving(false)
+    }
+  }
+
+  async function handleGoogleConfigRemove() {
+    setGoogleConfigSaving(true)
+    setMessage(null)
+    setError(null)
+    try {
+      await api('/api/integrations/google/config', { method: 'DELETE' })
+      setGoogleClientSecret('')
+      setMessage('Workspace Google OAuth credentials removed.')
+      loadStatus()
+    } catch {
+      setError('Failed to remove Google OAuth credentials')
+    } finally {
+      setGoogleConfigSaving(false)
+    }
+  }
 
   async function connectGoogle() {
     setError(null)
@@ -390,117 +452,193 @@ export function IntegrationsPage() {
           </div>
           <div className="flex-1">
             <h2 className="text-lg font-semibold text-slate-900">
-              Google Calendar
+              Google Calendar &amp; Gmail
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Sync upcoming meetings into your CRM timeline. Events are matched
-              to contacts by attendee email when possible.
+              Connect your Google account to sync calendar meetings and inbox
+              emails into the CRM timeline. Calendar and Gmail share one OAuth
+              app.
             </p>
 
-            {status?.googleCalendar.autoSyncEnabled && (
-              <p className="mt-2 text-xs text-emerald-700">
-                Auto-sync enabled — server syncs every{' '}
-                {status.googleCalendar.autoSyncIntervalMinutes} minute(s).
-              </p>
-            )}
+            {canManageIntegrations && googleOAuth && (
+              <div className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                {googleOAuth.source === 'env' ? (
+                  <p className="text-sm text-slate-600">
+                    Google OAuth is configured on the server. Team members can
+                    connect their accounts below.
+                  </p>
+                ) : !googleOAuth.configured ? (
+                  <>
+                    <p className="text-sm text-slate-600">
+                      Add your Google Cloud OAuth client ID and secret. Create
+                      them in Google Cloud Console with Calendar API and Gmail
+                      API enabled.
+                    </p>
+                    <form
+                      onSubmit={handleGoogleConfigSave}
+                      className="max-w-lg space-y-3"
+                    >
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Client ID
+                        </label>
+                        <input
+                          required
+                          type="text"
+                          value={googleClientId}
+                          onChange={(e) => setGoogleClientId(e.target.value)}
+                          placeholder="123456789-abc.apps.googleusercontent.com"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Client secret
+                        </label>
+                        <input
+                          required
+                          type="password"
+                          value={googleClientSecret}
+                          onChange={(e) => setGoogleClientSecret(e.target.value)}
+                          placeholder="GOCSPX-..."
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={googleConfigSaving}
+                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {googleConfigSaving ? 'Saving...' : 'Save Google OAuth'}
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-sm text-emerald-700">
+                      OAuth configured for this workspace
+                      {googleOAuth.clientId ? ` (${googleOAuth.clientId})` : ''}.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleGoogleConfigRemove}
+                      disabled={googleConfigSaving}
+                      className="text-sm font-medium text-slate-600 underline hover:text-slate-900 disabled:opacity-50"
+                    >
+                      Remove workspace credentials
+                    </button>
+                  </div>
+                )}
 
-            {!status?.googleCalendar.configured ? (
-              <p className="mt-3 text-sm text-amber-700">
-                Not configured on server — add{' '}
-                <code className="text-xs">GOOGLE_CLIENT_ID</code> and{' '}
-                <code className="text-xs">GOOGLE_CLIENT_SECRET</code> to{' '}
-                <code className="text-xs">packages/api/.env</code>.
-              </p>
-            ) : status.googleCalendar.connected ? (
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={syncCalendar}
-                  disabled={syncing}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  <RefreshCw
-                    className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`}
-                  />
-                  {syncing ? 'Syncing...' : 'Sync now'}
-                </button>
-                <button
-                  type="button"
-                  onClick={disconnectGoogle}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <Unplug className="h-4 w-4" />
-                  Disconnect
-                </button>
+                <CopyableCode
+                  value={googleOAuth.calendarRedirectUri}
+                  label="Calendar redirect URI (add in Google Cloud)"
+                />
+                <CopyableCode
+                  value={googleOAuth.gmailRedirectUri}
+                  label="Gmail redirect URI (add in Google Cloud)"
+                />
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={connectGoogle}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                <Plug className="h-4 w-4" />
-                Connect Google Calendar
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start gap-4">
-          <div className="rounded-lg bg-red-50 p-3 text-red-600">
-            <Mail className="h-6 w-6" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-lg font-semibold text-slate-900">Gmail Inbox</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Sync recent inbox emails to your CRM timeline. Messages are matched
-              to contacts by sender email.
-            </p>
-
-            {status?.gmail?.autoSyncEnabled && (
-              <p className="mt-2 text-xs text-emerald-700">
-                Auto-sync enabled on server.
-              </p>
             )}
 
-            {!status?.gmail?.configured ? (
-              <p className="mt-3 text-sm text-amber-700">
-                Uses the same Google OAuth credentials as Calendar.
-              </p>
-            ) : status.gmail.connected ? (
-              <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-6 border-t border-slate-200 pt-6">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Google Calendar
+              </h3>
+              {status?.googleCalendar.autoSyncEnabled && (
+                <p className="mt-1 text-xs text-emerald-700">
+                  Auto-sync enabled — server syncs every{' '}
+                  {status.googleCalendar.autoSyncIntervalMinutes} minute(s).
+                </p>
+              )}
+
+              {!googleConfigured ? (
+                <p className="mt-2 text-sm text-slate-500">
+                  {canManageIntegrations
+                    ? 'Save Google OAuth credentials above to enable Calendar sync.'
+                    : 'Ask a manager to configure Google OAuth for this workspace.'}
+                </p>
+              ) : status.googleCalendar.connected ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={syncCalendar}
+                    disabled={syncing}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`}
+                    />
+                    {syncing ? 'Syncing...' : 'Sync now'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={disconnectGoogle}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <Unplug className="h-4 w-4" />
+                    Disconnect
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={syncGmail}
-                  disabled={gmailSyncing}
-                  className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                  onClick={connectGoogle}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                 >
-                  <RefreshCw
-                    className={`h-4 w-4 ${gmailSyncing ? 'animate-spin' : ''}`}
-                  />
-                  {gmailSyncing ? 'Syncing...' : 'Sync inbox'}
+                  <Plug className="h-4 w-4" />
+                  Connect Google Calendar
                 </button>
+              )}
+            </div>
+
+            <div className="mt-6 border-t border-slate-200 pt-6">
+              <h3 className="text-sm font-semibold text-slate-900">Gmail Inbox</h3>
+              {status?.gmail?.autoSyncEnabled && (
+                <p className="mt-1 text-xs text-emerald-700">
+                  Auto-sync enabled on server.
+                </p>
+              )}
+
+              {!googleConfigured ? (
+                <p className="mt-2 text-sm text-slate-500">
+                  {canManageIntegrations
+                    ? 'Save Google OAuth credentials above to enable Gmail sync.'
+                    : 'Ask a manager to configure Google OAuth for this workspace.'}
+                </p>
+              ) : status.gmail?.connected ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={syncGmail}
+                    disabled={gmailSyncing}
+                    className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 ${gmailSyncing ? 'animate-spin' : ''}`}
+                    />
+                    {gmailSyncing ? 'Syncing...' : 'Sync inbox'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={disconnectGmail}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <Unplug className="h-4 w-4" />
+                    Disconnect
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={disconnectGmail}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  onClick={connectGmail}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
                 >
-                  <Unplug className="h-4 w-4" />
-                  Disconnect
+                  <Plug className="h-4 w-4" />
+                  Connect Gmail
                 </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={connectGmail}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-              >
-                <Plug className="h-4 w-4" />
-                Connect Gmail
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </section>

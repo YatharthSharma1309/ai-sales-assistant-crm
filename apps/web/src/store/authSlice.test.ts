@@ -13,9 +13,13 @@ vi.stubGlobal('localStorage', {
 })
 
 const { default: authReducer, fetchMe, logout } = await import('./authSlice')
+const { setTokens, getAccessToken, clearTokens } = await import(
+  '../shared/api/client'
+)
 
 describe('authSlice session handling', () => {
   beforeEach(() => {
+    clearTokens()
     for (const key of Object.keys(storage)) {
       delete storage[key]
     }
@@ -69,7 +73,7 @@ describe('authSlice session handling', () => {
   })
 
   it('fetchMe.rejected with 401 clears session and token', () => {
-    storage.crm_access_token = 'stale-token'
+    setTokens('stale-token')
 
     const state = authReducer(
       {
@@ -96,11 +100,11 @@ describe('authSlice session handling', () => {
     expect(state.user).toBeNull()
     expect(state.sessionChecked).toBe(true)
     expect(state.error).toBe('Unauthorized')
-    expect(storage.crm_access_token).toBeUndefined()
+    expect(getAccessToken()).toBeNull()
   })
 
   it('fetchMe.rejected with network error keeps token', () => {
-    storage.crm_access_token = 'valid-token'
+    setTokens('valid-token')
 
     const state = authReducer(
       {
@@ -127,7 +131,7 @@ describe('authSlice session handling', () => {
     expect(state.user).toBeNull()
     expect(state.sessionChecked).toBe(true)
     expect(state.error).toBe('Could not reach the server')
-    expect(storage.crm_access_token).toBe('valid-token')
+    expect(getAccessToken()).toBe('valid-token')
   })
 
   it('logout resets sessionChecked', () => {

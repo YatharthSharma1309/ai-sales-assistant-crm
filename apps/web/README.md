@@ -46,11 +46,11 @@ src/
 
 | Storage | Purpose |
 |---------|---------|
-| `crm_access_token` (localStorage) | 15-minute JWT sent as `Authorization: Bearer` |
+| In-memory access JWT | 15-minute token sent as `Authorization: Bearer` (not persisted) |
 | `crm_refresh` (httpOnly cookie) | Opaque refresh token for `POST /api/auth/refresh` |
-| `crm_token` (localStorage) | Legacy key — migrated once on read |
+| Legacy `localStorage` keys | Migrated once into memory on read, then cleared |
 
-All API calls use `credentials: 'include'` so the refresh cookie is sent. Sign out calls `POST /api/auth/logout` (clears cookie) then clears local access token.
+All API calls use `credentials: 'include'` so the refresh cookie is sent. After a page reload, `restoreSession` refreshes the access token from the cookie. Sign out calls `POST /api/auth/logout` (clears cookie) then clears the in-memory token.
 
 Public routes (no login required):
 

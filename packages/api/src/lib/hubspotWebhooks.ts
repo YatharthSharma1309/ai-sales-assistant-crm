@@ -36,7 +36,7 @@ export function verifyHubSpotWebhookV3(
   }
 
   const ts = Number(timestamp)
-  if (!Number.isFinite(ts) || Date.now() - ts > MAX_TIMESTAMP_MS) {
+  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_TIMESTAMP_MS) {
     return false
   }
 

@@ -1,4 +1,5 @@
 import { prisma } from './prisma.js'
+import { openRouterChatCompletion } from './openRouter.js'
 
 const STAGE_LABELS: Record<string, string> = {
   DISCOVERY: 'Discovery',
@@ -148,45 +149,26 @@ Best regards`
   return { subject, body }
 }
 
-export async function generateEmailWithOpenAI(
+export async function generateEmailWithAI(
   context: EmailContext,
   tone: string,
   goal: string,
-  apiKey: string,
 ): Promise<{ subject: string; body: string }> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You write concise B2B SaaS sales follow-up emails.
+  const content = await openRouterChatCompletion(
+    [
+      {
+        role: 'system',
+        content: `You write concise B2B SaaS sales follow-up emails.
 Use the CRM context provided. Match the requested tone.
 Return JSON with "subject" and "body" keys only. Keep under 150 words.`,
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({ ...context, tone, goal }),
-        },
-      ],
-      response_format: { type: 'json_object' },
-    }),
-  })
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({ ...context, tone, goal }),
+      },
+    ],
+    { jsonMode: true },
+  )
 
-  if (!response.ok) {
-    throw new Error(`OpenAI error: ${response.status}`)
-  }
-
-  const data = (await response.json()) as {
-    choices: { message: { content: string } }[]
-  }
-  return JSON.parse(data.choices[0].message.content) as {
-    subject: string
-    body: string
-  }
+  return JSON.parse(content) as { subject: string; body: string }
 }

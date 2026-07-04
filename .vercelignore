@@ -1,0 +1,5 @@
+node_modules
+packages/api/prisma/dev.db
+packages/api/prisma/*.db-journal
+**/.env
+**/.env.local

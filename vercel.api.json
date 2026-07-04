@@ -1,0 +1,12 @@
+{
+  "installCommand": "npm ci --include=dev",
+  "buildCommand": "npm run build:api && npm run db:migrate:deploy --workspace=packages/api",
+  "outputDirectory": "public",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ]
+}

@@ -102,8 +102,14 @@ app.use('/api/organization', organizationRoutes)
 
 app.use(errorHandler)
 
-app.listen(port, () => {
-  console.log(`API running at http://localhost:${port}`)
-  startCalendarSyncJob()
-  startGmailSyncJob()
-})
+export default app
+
+const isServerless = Boolean(process.env.VERCEL)
+
+if (!isServerless) {
+  app.listen(port, () => {
+    console.log(`API running at http://localhost:${port}`)
+    startCalendarSyncJob()
+    startGmailSyncJob()
+  })
+}

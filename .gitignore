@@ -11,6 +11,7 @@ Thumbs.db
 *.log
 coverage
 .vite
+.vercel
 packages/api/prisma/dev.db
 packages/api/prisma/dev.db-journal
 packages/api/prisma/e2e.db

@@ -558,7 +558,7 @@ export function IntegrationsPage() {
                     ? 'Save Google OAuth credentials above to enable Calendar sync.'
                     : 'Ask a manager to configure Google OAuth for this workspace.'}
                 </p>
-              ) : status.googleCalendar.connected ? (
+              ) : status?.googleCalendar.connected ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -606,7 +606,7 @@ export function IntegrationsPage() {
                     ? 'Save Google OAuth credentials above to enable Gmail sync.'
                     : 'Ask a manager to configure Google OAuth for this workspace.'}
                 </p>
-              ) : status.gmail?.connected ? (
+              ) : status?.gmail?.connected ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"

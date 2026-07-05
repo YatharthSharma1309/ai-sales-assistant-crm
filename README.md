@@ -77,7 +77,8 @@ ai-sales-assistant-crm/
 ├── packages/api/             # Express API → packages/api/README.md
 ├── packages/shared/          # Shared constants
 ├── docs/
-│   └── BEGINNER_SIMULATION.md  # Guided walkthrough for new users
+│   ├── BEGINNER_SIMULATION.md  # Guided walkthrough for new users
+│   └── PROJECT_STATUS.md       # Completed vs remaining checklist
 ├── e2e/                      # Playwright smoke tests
 ├── scripts/                  # live-test.ps1, deploy helpers
 ├── README.md                 # This file
@@ -202,17 +203,15 @@ node packages/api/scripts/smoke-features.mjs
 
 ## Production
 
-Deploy without Docker — see **[DEPLOY.md](./DEPLOY.md)**.
+Deployed on **Vercel + Neon** — see **[DEPLOY.md](./DEPLOY.md)** and **[PROJECT_STATUS.md](./PROJECT_STATUS.md)**.
 
-| Layer | Platform |
-|-------|----------|
-| Frontend | Vercel (`VITE_API_URL` → your API) |
-| API + DB | Railway or Render |
+| Layer | Platform | Live |
+|-------|----------|------|
+| Frontend | Vercel | https://ai-sales-assistant-crm.vercel.app |
+| API | Vercel | https://ai-sales-assistant-crm-api.vercel.app |
+| Database | Neon PostgreSQL | — |
 
-```bash
-npm run build:api
-npm run start:api
-```
+Alternative: Railway or Render for long-running API (see `DEPLOY.md`).
 
 ---
 

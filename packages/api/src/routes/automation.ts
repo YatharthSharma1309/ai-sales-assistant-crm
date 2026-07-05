@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import type { Request } from 'express'
+import type { Request, Response } from 'express'
 import { protectedMiddleware } from '../lib/auth.js'
 import { requireRole } from '../lib/rbac.js'
 import {
@@ -19,14 +19,17 @@ function verifyCron(req: Request): boolean {
   return false
 }
 
-router.post('/cron/stale-deal-alerts', async (req, res) => {
+async function runStaleDealAlertsCron(req: Request, res: Response) {
   if (!verifyCron(req)) {
     res.status(401).json({ error: 'Unauthorized' })
     return
   }
   const results = await runStaleDealAlertsForAllOrgs()
   res.json({ ok: true, results })
-})
+}
+
+router.post('/cron/stale-deal-alerts', runStaleDealAlertsCron)
+router.get('/cron/stale-deal-alerts', runStaleDealAlertsCron)
 
 router.use(protectedMiddleware)
 

@@ -16,7 +16,7 @@ const captureSchema = z.object({
 
 router.get('/lead-form/:slug', publicLeadLimiter, async (req, res) => {
   const org = await prisma.organization.findUnique({
-    where: { slug: req.params.slug },
+    where: { slug: String(req.params.slug) },
     select: { id: true, name: true, slug: true },
   })
   if (!org) {

@@ -433,7 +433,7 @@ router.post('/google/sync', protectedMiddleware, async (req, res) => {
   res.json(result)
 })
 
-router.post('/cron/calendar-sync', async (req, res) => {
+async function runCalendarSyncCron(req: { headers: Record<string, unknown> }, res: import('express').Response) {
   if (!verifyCronSecret(req)) {
     res.status(401).json({ error: 'Unauthorized' })
     return
@@ -447,9 +447,9 @@ router.post('/cron/calendar-sync', async (req, res) => {
     errors: results.filter((r) => r.error).length,
     results,
   })
-})
+}
 
-router.post('/cron/gmail-sync', async (req, res) => {
+async function runGmailSyncCron(req: { headers: Record<string, unknown> }, res: import('express').Response) {
   if (!verifyCronSecret(req)) {
     res.status(401).json({ error: 'Unauthorized' })
     return
@@ -463,7 +463,13 @@ router.post('/cron/gmail-sync', async (req, res) => {
     errors: results.filter((r) => r.error).length,
     results,
   })
-})
+}
+
+router.post('/cron/calendar-sync', runCalendarSyncCron)
+router.get('/cron/calendar-sync', runCalendarSyncCron)
+
+router.post('/cron/gmail-sync', runGmailSyncCron)
+router.get('/cron/gmail-sync', runGmailSyncCron)
 
 const hubspotConnectSchema = z.object({
   accessToken: z.string().min(1),

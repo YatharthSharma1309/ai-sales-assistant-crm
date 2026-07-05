@@ -76,7 +76,7 @@ npx vercel deploy --prod --local-config vercel.api.json --project ai-sales-assis
 
 5. Verify: `GET https://ai-sales-assistant-crm-api.vercel.app/api/health` → `{"status":"ok",...}`
 
-**Vercel Cron** (in `vercel.api.json`): stale-deal alerts daily, calendar sync every 6h, Gmail sync every 3h. Requires `CRON_SECRET` in env.
+**Vercel Cron** (Hobby: one daily job at 09:00 UTC via `/api/cron/daily`): stale-deal alerts + calendar + Gmail sync. Requires `CRON_SECRET` in env. Per-job cron URLs remain available for manual `curl` with `x-cron-secret`.
 
 ### Step 4 — Vercel: frontend
 

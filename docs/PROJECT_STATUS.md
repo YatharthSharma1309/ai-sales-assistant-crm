@@ -108,7 +108,7 @@ HubSpot webhook target: `https://ai-sales-assistant-crm-api.vercel.app/api/integ
 |---------|---------------------------|---------------------|
 | Database | SQLite `dev.db` | Neon PostgreSQL |
 | Background interval jobs | Optional via env | **Disabled** (serverless) |
-| Calendar / Gmail / stale-deal cron | Manual or `CRON_SECRET` curl | **Vercel Cron** (daily / every 3–6h) |
+| Calendar / Gmail / stale-deal cron | Manual or `CRON_SECRET` curl | **Vercel Cron** daily (`/api/cron/daily`) |
 | Email | Mock without Resend | Resend when keys set |
 | Rate limiting | Off with `RATE_LIMIT_DISABLED=1` | On |
 

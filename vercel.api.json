@@ -5,16 +5,8 @@
   "framework": null,
   "crons": [
     {
-      "path": "/api/automation/cron/stale-deal-alerts",
+      "path": "/api/cron/daily",
       "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/integrations/cron/calendar-sync",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/integrations/cron/gmail-sync",
-      "schedule": "30 */3 * * *"
     }
   ],
   "rewrites": [

@@ -26,6 +26,7 @@ import organizationRoutes from './routes/organization.js'
 import searchRoutes from './routes/search.js'
 import publicRoutes from './routes/public.js'
 import automationRoutes from './routes/automation.js'
+import cronRoutes from './routes/cron.js'
 import { startCalendarSyncJob } from './jobs/calendarSyncJob.js'
 import { startGmailSyncJob } from './jobs/gmailSyncJob.js'
 import { startStaleDealAlertsJob } from './jobs/staleDealAlertsJob.js'
@@ -127,6 +128,7 @@ app.use('/api/team', teamRoutes)
 app.use('/api/organization', organizationRoutes)
 app.use('/api/search', searchRoutes)
 app.use('/api/automation', automationRoutes)
+app.use('/api/cron', cronRoutes)
 
 app.use(errorHandler)
 

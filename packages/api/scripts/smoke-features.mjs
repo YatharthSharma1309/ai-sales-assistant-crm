@@ -149,18 +149,21 @@ if (token) {
   }
 }
 
+const testOwnerEmail = process.env.TEST_OWNER_EMAIL ?? 'demo@example.com'
+const testOwnerPassword = process.env.TEST_OWNER_PASSWORD ?? 'DemoPass123!'
+
 try {
   const login = await json('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email: 'yatharthsharma1309@gmail.com', password: 'OwnerPass123!' }),
+    body: JSON.stringify({ email: testOwnerEmail, password: testOwnerPassword }),
   })
   if (login.requiresOrgSelection) {
     const orgId = login.organizations?.[0]?.id
     const pick = await json('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({
-        email: 'yatharthsharma1309@gmail.com',
-        password: 'OwnerPass123!',
+        email: testOwnerEmail,
+        password: testOwnerPassword,
         organizationId: orgId,
       }),
     })

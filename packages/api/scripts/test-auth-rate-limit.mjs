@@ -4,8 +4,9 @@
  */
 const API = process.env.API_URL ?? 'http://127.0.0.1:3001'
 
-const ownerEmail = process.env.TEST_OWNER_EMAIL ?? 'yatharthsharma1309@gmail.com'
-const ownerPassword = process.env.TEST_OWNER_PASSWORD ?? 'OwnerPass123!'
+// Use demo seed credentials by default; override with TEST_OWNER_EMAIL / TEST_OWNER_PASSWORD for your local admin.
+const ownerEmail = process.env.TEST_OWNER_EMAIL ?? 'demo@example.com'
+const ownerPassword = process.env.TEST_OWNER_PASSWORD ?? 'DemoPass123!'
 
 function pickRateHeaders(headers) {
   const out = {}

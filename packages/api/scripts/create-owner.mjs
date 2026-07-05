@@ -4,9 +4,9 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 const email = process.argv[2]
-const name = process.argv[3] ?? 'Yatharth Sharma'
-const orgName = process.argv[4] ?? 'Yatharth Workspace'
-const password = process.argv[5] ?? 'OwnerPass123!'
+const name = process.argv[3] ?? 'Admin User'
+const orgName = process.argv[4] ?? 'My Workspace'
+const password = process.argv[5] ?? 'ChangeMeNow123!'
 
 if (!email) {
   console.error('Usage: node scripts/create-owner.mjs <email> [name] [orgName] [password]')

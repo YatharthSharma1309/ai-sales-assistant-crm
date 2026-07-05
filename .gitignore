@@ -1,9 +1,17 @@
 node_modules
 dist
 packages/shared/dist
+
+# Secrets — never commit real keys or local env files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!**/.env.example
+packages/api/.env
+*.pem
+*.key
+credentials.json
+secrets.json
 *.db
 *.db-journal
 .DS_Store

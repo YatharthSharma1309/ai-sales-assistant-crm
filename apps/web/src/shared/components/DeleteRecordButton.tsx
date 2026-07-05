@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useDialog } from './DialogProvider'
 
 type DeleteRecordButtonProps = {
   recordLabel: string
@@ -13,17 +14,18 @@ export function DeleteRecordButton({
   onDelete,
 }: DeleteRecordButtonProps) {
   const navigate = useNavigate()
+  const { confirm } = useDialog()
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleDelete() {
-    if (
-      !window.confirm(
-        `Delete ${recordLabel}? This cannot be undone.`,
-      )
-    ) {
-      return
-    }
+    const ok = await confirm({
+      title: 'Delete record',
+      message: `Delete ${recordLabel}? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
+    if (!ok) return
 
     setDeleting(true)
     setError(null)

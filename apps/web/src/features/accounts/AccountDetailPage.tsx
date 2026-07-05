@@ -12,10 +12,12 @@ import {
   fetchAccount,
   updateAccount,
 } from '../../store/accountsSlice'
+import { useToast } from '../../shared/components/ToastProvider'
 
 export function AccountDetailPage() {
   const { id } = useParams<{ id: string }>()
   const dispatch = useAppDispatch()
+  const { success, error: toastError } = useToast()
   const { isManager } = useRole()
   const { current: account, currentError } = useAppSelector(
     (state) => state.accounts,
@@ -49,7 +51,7 @@ export function AccountDetailPage() {
   async function handleSave(e: FormEvent) {
     e.preventDefault()
     if (!account) return
-    await dispatch(
+    const result = await dispatch(
       updateAccount({
         id: account.id,
         name: form.name,
@@ -58,7 +60,12 @@ export function AccountDetailPage() {
         website: form.website || undefined,
       }),
     )
-    setEditing(false)
+    if (updateAccount.fulfilled.match(result)) {
+      success('Account saved')
+      setEditing(false)
+    } else {
+      toastError('Failed to save account')
+    }
   }
 
   if (currentError || !account) {

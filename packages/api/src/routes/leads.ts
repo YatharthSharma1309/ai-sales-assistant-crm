@@ -18,7 +18,11 @@ import {
   handleOrgValidationError,
 } from '../lib/orgValidation.js'
 import { parsePageQuery, paginatedResponse } from '../lib/pagination.js'
-import { recalculateLeadScore, recalculateOrgLeadScores } from '../lib/leadScoring.js'
+import {
+  computeLeadScore,
+  recalculateLeadScore,
+  recalculateOrgLeadScores,
+} from '../lib/leadScoring.js'
 
 const router = Router()
 router.use(protectedMiddleware)
@@ -47,6 +51,34 @@ const importSchema = z.object({
     .min(1)
     .max(500),
 })
+
+async function buildLeadScoreFactors(
+  lead: {
+    id: string
+    status: import('@prisma/client').LeadStatus
+    source: string | null
+    contact: { email: string | null; jobTitle: string | null } | null
+  },
+  organizationId: string,
+) {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const recentActivityCount = await prisma.activity.count({
+    where: {
+      organizationId,
+      leadId: lead.id,
+      type: { in: ['EMAIL', 'CALL', 'MEETING'] },
+      createdAt: { gte: thirtyDaysAgo },
+    },
+  })
+
+  return computeLeadScore({
+    status: lead.status,
+    source: lead.source,
+    hasContactEmail: Boolean(lead.contact?.email),
+    jobTitle: lead.contact?.jobTitle,
+    recentActivityCount,
+  }).factors
+}
 
 router.get('/', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
@@ -191,7 +223,9 @@ router.get('/:id', async (req, res) => {
     return
   }
 
-  res.json(lead)
+  const scoreFactors = await buildLeadScoreFactors(lead, req.auth!.organizationId)
+
+  res.json({ ...lead, scoreFactors })
 })
 
 router.patch('/:id', async (req, res) => {

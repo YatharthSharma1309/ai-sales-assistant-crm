@@ -18,7 +18,7 @@ router.get('/stats', async (req, res) => {
   const openStageFilter = { in: [...OPEN_STAGES] }
   const closedPipelineExclude = { notIn: [...CLOSED_STAGES] }
 
-  const [leadCount, dealCount, dealsByStage, totalArr, openDeals] =
+  const [leadCount, dealCount, dealsByStage, leadsByStatus, wonDeals, lostDeals, totalArr, openDeals] =
     await Promise.all([
       prisma.lead.count({ where: { organizationId: orgId, ...repFilter } }),
       prisma.deal.count({
@@ -32,6 +32,17 @@ router.get('/stats', async (req, res) => {
         by: ['stage'],
         where: { organizationId: orgId, ...repFilter },
         _count: { stage: true },
+      }),
+      prisma.lead.groupBy({
+        by: ['status'],
+        where: { organizationId: orgId, ...repFilter },
+        _count: { status: true },
+      }),
+      prisma.deal.count({
+        where: { organizationId: orgId, stage: 'CLOSED_WON', ...repFilter },
+      }),
+      prisma.deal.count({
+        where: { organizationId: orgId, stage: 'CLOSED_LOST', ...repFilter },
       }),
       prisma.deal.aggregate({
         where: {
@@ -61,6 +72,12 @@ router.get('/stats', async (req, res) => {
     dealCount,
     pipelineValue: totalArr._sum?.arr ?? 0,
     weightedPipeline,
+    wonDeals,
+    lostDeals,
+    leadsByStatus: leadsByStatus.map((row) => ({
+      status: row.status,
+      count: row._count.status,
+    })),
     dealsByStage: dealsByStage.map((row) => ({
       stage: row.stage,
       count: row._count.stage,
@@ -240,6 +257,52 @@ router.get('/forecast', async (req, res) => {
     isManager ? undefined : { assignedToId: req.auth!.userId },
   )
   res.json(forecast)
+})
+
+router.get('/trends', async (req, res) => {
+  const orgId = req.auth!.organizationId
+  const isManager = isManagerRole(req.auth!.role)
+  const repFilter = isManager
+    ? {}
+    : { assignedToId: req.auth!.userId }
+
+  const weeks: { week: string; leads: number; deals: number }[] = []
+  const now = new Date()
+
+  for (let i = 3; i >= 0; i--) {
+    const weekEnd = new Date(now)
+    weekEnd.setDate(weekEnd.getDate() - i * 7)
+    const weekStart = new Date(weekEnd)
+    weekStart.setDate(weekStart.getDate() - 7)
+
+    const [leads, deals] = await Promise.all([
+      prisma.lead.count({
+        where: {
+          organizationId: orgId,
+          createdAt: { gte: weekStart, lt: weekEnd },
+          ...repFilter,
+        },
+      }),
+      prisma.deal.count({
+        where: {
+          organizationId: orgId,
+          createdAt: { gte: weekStart, lt: weekEnd },
+          ...repFilter,
+        },
+      }),
+    ])
+
+    weeks.push({
+      week: weekStart.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      }),
+      leads,
+      deals,
+    })
+  }
+
+  res.json({ weeks })
 })
 
 export default router

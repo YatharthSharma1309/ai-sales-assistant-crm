@@ -3,11 +3,13 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { fetchMe, restoreSession } from '../../store/authSlice'
 import { getAccessToken } from '../../shared/api/client'
+import { Skeleton } from '../../shared/components/Skeleton'
 
 function SessionSpinner() {
   return (
-    <div className="flex min-h-screen items-center justify-center text-slate-500">
-      Loading workspace...
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-4 w-32" />
     </div>
   )
 }

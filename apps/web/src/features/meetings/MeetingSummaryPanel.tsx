@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Video } from 'lucide-react'
+import { useToast } from '../../shared/components/ToastProvider'
 import { api } from '../../shared/api/client'
 import type { MeetingSummaryResult } from '../../shared/types/meeting'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -27,6 +28,7 @@ export function MeetingSummaryPanel({
   showLinkPicker = false,
 }: MeetingSummaryPanelProps) {
   const dispatch = useAppDispatch()
+  const { success, error: toastError } = useToast()
   const { items: leads } = useAppSelector((state) => state.leads)
   const { deals } = useAppSelector((state) => state.pipeline)
   const { items: contacts } = useAppSelector((state) => state.contacts)
@@ -43,7 +45,6 @@ export function MeetingSummaryPanel({
   const [createTasks, setCreateTasks] = useState(true)
   const [result, setResult] = useState<MeetingSummaryResult | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (showLinkPicker) {
@@ -61,7 +62,6 @@ export function MeetingSummaryPanel({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
-    setError(null)
     try {
       const payload: Record<string, unknown> = {
         title,
@@ -82,8 +82,9 @@ export function MeetingSummaryPanel({
       )
       setResult(data)
       if (data.meetingActivityId) onSaved?.()
+      success('Meeting summary generated')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to summarize')
+      toastError(err instanceof Error ? err.message : 'Failed to summarize')
     } finally {
       setLoading(false)
     }
@@ -210,12 +211,6 @@ Objection: budget until Q3."
             Create tasks from action items
           </label>
         </div>
-
-        {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-            {error}
-          </p>
-        )}
 
         <button
           type="submit"

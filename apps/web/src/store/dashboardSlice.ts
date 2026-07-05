@@ -1,6 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { api, ApiError } from '../shared/api/client'
-import type { DashboardStats, PipelineForecast } from '../shared/types'
+import type { DashboardStats, DashboardTrends, PipelineForecast } from '../shared/types'
 import type { ManagerDashboard, OnboardingStatus } from '../shared/types/team'
 
 type DashboardState = {
@@ -8,9 +8,11 @@ type DashboardState = {
   forecast: PipelineForecast | null
   manager: ManagerDashboard | null
   onboarding: OnboardingStatus | null
+  trends: DashboardTrends | null
   loading: boolean
   forecastLoading: boolean
   managerLoading: boolean
+  trendsLoading: boolean
   error: string | null
   forecastError: string | null
   managerError: string | null
@@ -21,9 +23,11 @@ const initialState: DashboardState = {
   forecast: null,
   manager: null,
   onboarding: null,
+  trends: null,
   loading: false,
   forecastLoading: false,
   managerLoading: false,
+  trendsLoading: false,
   error: null,
   forecastError: null,
   managerError: null,
@@ -56,6 +60,11 @@ export const fetchManagerDashboard = createAsyncThunk(
 export const fetchOnboardingStatus = createAsyncThunk(
   'dashboard/fetchOnboarding',
   async () => api<OnboardingStatus>('/api/dashboard/onboarding'),
+)
+
+export const fetchDashboardTrends = createAsyncThunk(
+  'dashboard/fetchTrends',
+  async () => api<DashboardTrends>('/api/dashboard/trends'),
 )
 
 const dashboardSlice = createSlice({
@@ -113,6 +122,16 @@ const dashboardSlice = createSlice({
       })
       .addCase(fetchOnboardingStatus.fulfilled, (state, action) => {
         state.onboarding = action.payload
+      })
+      .addCase(fetchDashboardTrends.pending, (state) => {
+        state.trendsLoading = true
+      })
+      .addCase(fetchDashboardTrends.fulfilled, (state, action) => {
+        state.trendsLoading = false
+        state.trends = action.payload
+      })
+      .addCase(fetchDashboardTrends.rejected, (state) => {
+        state.trendsLoading = false
       })
   },
 })

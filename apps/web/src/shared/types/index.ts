@@ -13,6 +13,8 @@ export type Organization = {
 
 export type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'UNQUALIFIED'
 
+export type ScoreFactor = { rule: string; points: number }
+
 export type ActivityType = 'NOTE' | 'CALL' | 'EMAIL' | 'MEETING' | 'TASK'
 
 export type Account = {
@@ -51,6 +53,7 @@ export type Lead = {
   notes: string | null
   score?: number
   scoreUpdatedAt?: string
+  scoreFactors?: ScoreFactor[]
   contactId: string | null
   assignedToId: string | null
   createdAt: string
@@ -94,6 +97,8 @@ export type Deal = {
   accountId: string | null
   assignedToId: string | null
   closeDate: string | null
+  riskLevel?: string | null
+  riskNote?: string | null
   createdAt: string
   updatedAt: string
   assignedTo?: { id: string; name: string; email: string } | null
@@ -112,6 +117,9 @@ export type DashboardStats = {
   dealCount: number
   pipelineValue: number
   weightedPipeline: number
+  wonDeals?: number
+  lostDeals?: number
+  leadsByStatus?: { status: string; count: number }[]
   dealsByStage: { stage: string; count: number }[]
 }
 
@@ -119,6 +127,12 @@ export type PipelineHealth = {
   score: number
   label: string
   staleDealCount: number
+  staleDeals?: {
+    id: string
+    title: string
+    updatedAt: string
+    stage: string
+  }[]
   bottleneckStage: string | null
   dealsAtRisk: number
 }
@@ -127,4 +141,8 @@ export type PipelineForecast = {
   weightedPipeline: number
   forecastPipeline: number
   pipelineHealth: PipelineHealth
+}
+
+export type DashboardTrends = {
+  weeks: { week: string; leads: number; deals: number }[]
 }

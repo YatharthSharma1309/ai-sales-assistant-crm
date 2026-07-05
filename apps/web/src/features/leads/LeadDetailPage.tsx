@@ -27,10 +27,13 @@ import { MeetingSummaryPanel } from '../meetings/MeetingSummaryPanel'
 import { AssigneeSelect } from '../../shared/components/AssigneeSelect'
 import { fetchTeam } from '../../store/teamSlice'
 import { useRole } from '../../shared/hooks/useRole'
+import { LeadScoreBreakdown } from '../../shared/components/LeadScoreBreakdown'
+import { useToast } from '../../shared/components/ToastProvider'
 
 export function LeadDetailPage() {
   const { id } = useParams<{ id: string }>()
   const dispatch = useAppDispatch()
+  const { success, error: toastError } = useToast()
   const { isManager } = useRole()
   const { user } = useAppSelector((state) => state.auth)
   const { current: lead, currentError } = useAppSelector((state) => state.leads)
@@ -73,42 +76,62 @@ export function LeadDetailPage() {
 
   async function handleStatusChange(status: LeadStatus) {
     if (!lead) return
-    await dispatch(updateLead({ id: lead.id, status }))
+    const result = await dispatch(updateLead({ id: lead.id, status }))
+    if (updateLead.fulfilled.match(result)) {
+      success('Status updated')
+    } else {
+      toastError('Failed to update status')
+    }
   }
 
   async function handleContactChange(contactId: string) {
     if (!lead) return
-    await dispatch(
+    const result = await dispatch(
       updateLead({
         id: lead.id,
         contactId: contactId || null,
       }),
     )
+    if (updateLead.fulfilled.match(result)) {
+      success('Contact linked')
+    } else {
+      toastError('Failed to link contact')
+    }
   }
 
   async function handleAssigneeChange(assignedToId: string) {
     if (!lead) return
-    await dispatch(
+    const result = await dispatch(
       updateLead({
         id: lead.id,
         assignedToId: assignedToId || null,
       }),
     )
+    if (updateLead.fulfilled.match(result)) {
+      success('Assignee updated')
+    } else {
+      toastError('Failed to update assignee')
+    }
   }
 
   async function handleSaveNotes(e: FormEvent) {
     e.preventDefault()
     if (!lead) return
     setSavingNotes(true)
-    await dispatch(updateLead({ id: lead.id, notes }))
+    const result = await dispatch(updateLead({ id: lead.id, notes }))
     setSavingNotes(false)
+    if (updateLead.fulfilled.match(result)) {
+      success('Notes saved')
+    } else {
+      toastError('Failed to save notes')
+    }
   }
 
   async function handleSaveDetails(e: FormEvent) {
     e.preventDefault()
     if (!lead) return
     setSavingDetails(true)
-    await dispatch(
+    const result = await dispatch(
       updateLead({
         id: lead.id,
         title,
@@ -116,6 +139,11 @@ export function LeadDetailPage() {
       }),
     )
     setSavingDetails(false)
+    if (updateLead.fulfilled.match(result)) {
+      success('Lead details saved')
+    } else {
+      toastError('Failed to save details')
+    }
   }
 
   if (currentError || !lead) {
@@ -185,6 +213,16 @@ export function LeadDetailPage() {
         </div>
 
         <aside className="space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900">Smart score</h3>
+            <div className="mt-3">
+              <LeadScoreBreakdown
+                score={lead.score}
+                factors={lead.scoreFactors}
+              />
+            </div>
+          </div>
+
           <form
             onSubmit={handleSaveDetails}
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"

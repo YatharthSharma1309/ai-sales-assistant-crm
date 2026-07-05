@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
+import { PasswordInput } from '../../shared/components/PasswordInput'
+import { SessionListSkeleton } from '../../shared/components/Skeleton'
+import { useToast } from '../../shared/components/ToastProvider'
 import { ROLE_LABELS } from '../../shared/constants/roles'
 import { useRole } from '../../shared/hooks/useRole'
 import { api, clearTokens } from '../../shared/api/client'
@@ -34,10 +37,11 @@ type SessionInfo = {
 
 export function SettingsPage() {
   const dispatch = useAppDispatch()
+  const { success, error: toastError } = useToast()
   const { user, organization, organizations } = useAppSelector(
     (state) => state.auth,
   )
-  const { role, isAdmin } = useRole()
+  const { role, isAdmin, isManager } = useRole()
   const [org, setOrg] = useState<OrgDetails | null>(null)
   const [orgName, setOrgName] = useState('')
   const [profileName, setProfileName] = useState('')
@@ -46,30 +50,28 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [profileMessage, setProfileMessage] = useState<string | null>(null)
-  const [passwordMessage, setPasswordMessage] = useState<string | null>(null)
   const [switchingOrg, setSwitchingOrg] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [emailPassword, setEmailPassword] = useState('')
-  const [emailMessage, setEmailMessage] = useState<string | null>(null)
   const [savingEmail, setSavingEmail] = useState(false)
   const [signingOutAll, setSigningOutAll] = useState(false)
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [loadingSessions, setLoadingSessions] = useState(true)
-  const [sessionsError, setSessionsError] = useState<string | null>(null)
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(
     null,
   )
+  const [staleAlertsEnabled, setStaleAlertsEnabled] = useState(true)
+  const [staleAlertDays, setStaleAlertDays] = useState(7)
+  const [savingAutomation, setSavingAutomation] = useState(false)
+  const [runningStaleAlerts, setRunningStaleAlerts] = useState(false)
 
   async function loadSessions() {
     setLoadingSessions(true)
-    setSessionsError(null)
     try {
       const data = await api<{ sessions: SessionInfo[] }>('/api/auth/sessions')
       setSessions(data.sessions)
     } catch {
-      setSessionsError('Could not load active sessions.')
+      toastError('Could not load active sessions.')
     } finally {
       setLoadingSessions(false)
     }
@@ -92,15 +94,27 @@ export function SettingsPage() {
       .catch(() => setOrg(null))
   }, [])
 
+  useEffect(() => {
+    if (!isManager) return
+    api<{
+      staleDealAlertsEnabled: boolean
+      staleDealAlertDays: number
+    }>('/api/organization/automation')
+      .then((data) => {
+        setStaleAlertsEnabled(data.staleDealAlertsEnabled)
+        setStaleAlertDays(data.staleDealAlertDays)
+      })
+      .catch(() => {})
+  }, [isManager])
+
   async function handleSwitchOrg(organizationId: string) {
     if (!organizationId || organizationId === organization?.id) return
     setSwitchingOrg(true)
-    setMessage(null)
     try {
       await dispatch(switchOrganization(organizationId)).unwrap()
       window.location.href = '/'
     } catch {
-      setMessage('Failed to switch workspace.')
+      toastError('Failed to switch workspace.')
       setSwitchingOrg(false)
     }
   }
@@ -108,12 +122,11 @@ export function SettingsPage() {
   async function handleSaveProfile(e: FormEvent) {
     e.preventDefault()
     setSavingProfile(true)
-    setProfileMessage(null)
     try {
       await dispatch(updateProfile({ name: profileName })).unwrap()
-      setProfileMessage('Profile updated.')
+      success('Profile updated.')
     } catch {
-      setProfileMessage('Failed to update profile.')
+      toastError('Failed to update profile.')
     } finally {
       setSavingProfile(false)
     }
@@ -122,21 +135,20 @@ export function SettingsPage() {
   async function handleChangeEmail(e: FormEvent) {
     e.preventDefault()
     setSavingEmail(true)
-    setEmailMessage(null)
     try {
       const result = await dispatch(
         changeEmail({ newEmail, password: emailPassword }),
       ).unwrap()
       setNewEmail('')
       setEmailPassword('')
-      setEmailMessage(
+      success(
         result.verifyUrl
           ? `${result.message} Dev link: ${result.verifyUrl}`
           : result.message,
       )
       dispatch(fetchMe())
     } catch {
-      setEmailMessage('Failed to request email change. Check your password.')
+      toastError('Failed to request email change. Check your password.')
     } finally {
       setSavingEmail(false)
     }
@@ -145,10 +157,10 @@ export function SettingsPage() {
   async function handleCancelEmailChange() {
     try {
       await dispatch(cancelEmailChange()).unwrap()
-      setEmailMessage('Pending email change cancelled.')
+      success('Pending email change cancelled.')
       dispatch(fetchMe())
     } catch {
-      setEmailMessage('Failed to cancel email change.')
+      toastError('Failed to cancel email change.')
     }
   }
 
@@ -158,7 +170,7 @@ export function SettingsPage() {
       await dispatch(logoutAll()).unwrap()
       window.location.href = '/login'
     } catch {
-      setMessage('Failed to sign out everywhere.')
+      toastError('Failed to sign out everywhere.')
       setSigningOutAll(false)
     }
   }
@@ -177,7 +189,7 @@ export function SettingsPage() {
       }
       await loadSessions()
     } catch {
-      setSessionsError('Failed to revoke session.')
+      toastError('Failed to revoke session.')
     } finally {
       setRevokingSessionId(null)
     }
@@ -197,16 +209,15 @@ export function SettingsPage() {
   async function handleChangePassword(e: FormEvent) {
     e.preventDefault()
     setSavingPassword(true)
-    setPasswordMessage(null)
     try {
       await dispatch(
         changePassword({ currentPassword, newPassword }),
       ).unwrap()
       setCurrentPassword('')
       setNewPassword('')
-      setPasswordMessage('Password changed successfully.')
+      success('Password changed successfully.')
     } catch {
-      setPasswordMessage('Failed to change password. Check your current password.')
+      toastError('Failed to change password. Check your current password.')
     } finally {
       setSavingPassword(false)
     }
@@ -216,18 +227,65 @@ export function SettingsPage() {
     e.preventDefault()
     if (!isAdmin) return
     setSaving(true)
-    setMessage(null)
     try {
       await api('/api/organization', {
         method: 'PATCH',
         body: JSON.stringify({ name: orgName }),
       })
-      setMessage('Workspace name updated.')
+      success('Workspace name updated.')
       dispatch(fetchMe())
     } catch {
-      setMessage('Failed to update workspace.')
+      toastError('Failed to update workspace.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSaveAutomation(e: FormEvent) {
+    e.preventDefault()
+    setSavingAutomation(true)
+    try {
+      await api('/api/organization/automation', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          staleDealAlertsEnabled: staleAlertsEnabled,
+          staleDealAlertDays: staleAlertDays,
+        }),
+      })
+      success('Automation settings saved.')
+    } catch {
+      toastError('Failed to save automation settings.')
+    } finally {
+      setSavingAutomation(false)
+    }
+  }
+
+  async function handleRunStaleAlerts() {
+    setRunningStaleAlerts(true)
+    try {
+      const result = await api<{
+        skipped?: boolean
+        reason?: string
+        staleCount?: number
+        recipientCount?: number
+      }>('/api/automation/stale-deal-alerts/run', { method: 'POST' })
+      if (result.skipped) {
+        const messages: Record<string, string> = {
+          disabled: 'Stale-deal alerts are disabled.',
+          throttled: 'Alerts were already sent recently (once per day).',
+          none_stale: 'No stale deals to alert on right now.',
+          no_managers: 'No managers found to email.',
+        }
+        success(messages[result.reason ?? ''] ?? 'No alerts sent.')
+      } else {
+        success(
+          `Sent alerts to ${result.recipientCount ?? 0} manager(s) about ${result.staleCount ?? 0} stale deal(s).`,
+        )
+      }
+    } catch {
+      toastError('Failed to run stale-deal alerts.')
+    } finally {
+      setRunningStaleAlerts(false)
     }
   }
 
@@ -276,9 +334,6 @@ export function SettingsPage() {
               onChange={(e) => setProfileName(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
-            {profileMessage && (
-              <p className="mt-2 text-sm text-slate-600">{profileMessage}</p>
-            )}
             <button
               type="submit"
               disabled={savingProfile}
@@ -288,37 +343,38 @@ export function SettingsPage() {
             </button>
           </form>
 
-          <form onSubmit={handleChangeEmail} className="mt-8 border-t border-slate-100 pt-6">
+          <form
+            onSubmit={handleChangeEmail}
+            className="mt-8 border-t border-slate-100 pt-6"
+            autoComplete="on"
+          >
             <h3 className="text-sm font-semibold text-slate-900">Change email</h3>
             <div className="mt-4 space-y-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+                <label htmlFor="settings-new-email" className="form-label">
                   New email
                 </label>
                 <input
+                  id="settings-new-email"
+                  name="email"
                   required
                   type="email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="input-field"
+                  autoComplete="email"
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Current password
-                </label>
-                <input
-                  required
-                  type="password"
-                  value={emailPassword}
-                  onChange={(e) => setEmailPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
+              <PasswordInput
+                id="settings-email-password"
+                name="password"
+                label="Current password"
+                required
+                value={emailPassword}
+                onChange={(e) => setEmailPassword(e.target.value)}
+                autoComplete="current-password"
+              />
             </div>
-            {emailMessage && (
-              <p className="mt-2 text-sm text-slate-600 break-all">{emailMessage}</p>
-            )}
             <button
               type="submit"
               disabled={savingEmail}
@@ -328,38 +384,33 @@ export function SettingsPage() {
             </button>
           </form>
 
-          <form onSubmit={handleChangePassword} className="mt-8 border-t border-slate-100 pt-6">
+          <form
+            onSubmit={handleChangePassword}
+            className="mt-8 border-t border-slate-100 pt-6"
+            autoComplete="on"
+          >
             <h3 className="text-sm font-semibold text-slate-900">Change password</h3>
             <div className="mt-4 space-y-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Current password
-                </label>
-                <input
-                  required
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  New password
-                </label>
-                <input
-                  required
-                  type="password"
-                  minLength={8}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
+              <PasswordInput
+                id="settings-current-password"
+                name="current-password"
+                label="Current password"
+                required
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+              <PasswordInput
+                id="settings-new-password"
+                name="new-password"
+                label="New password"
+                required
+                minLength={8}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+              />
             </div>
-            {passwordMessage && (
-              <p className="mt-2 text-sm text-slate-600">{passwordMessage}</p>
-            )}
             <button
               type="submit"
               disabled={savingPassword}
@@ -375,13 +426,8 @@ export function SettingsPage() {
               Manage devices where you&apos;re signed in.
             </p>
 
-            {loadingSessions && (
-              <p className="mt-3 text-sm text-slate-500">Loading sessions...</p>
-            )}
-            {sessionsError && (
-              <p className="mt-3 text-sm text-red-600">{sessionsError}</p>
-            )}
-            {!loadingSessions && sessions.length === 0 && !sessionsError && (
+            {loadingSessions && <SessionListSkeleton />}
+            {!loadingSessions && sessions.length === 0 && (
               <p className="mt-3 text-sm text-slate-500">No other active sessions.</p>
             )}
             {!loadingSessions && sessions.length > 0 && (
@@ -439,6 +485,56 @@ export function SettingsPage() {
           </div>
         </section>
 
+        {isManager && (
+          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+            <h2 className="text-lg font-semibold text-slate-900">Workflow automation</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Email managers when open deals haven&apos;t been updated in a while.
+            </p>
+            <form onSubmit={handleSaveAutomation} className="mt-4 max-w-md space-y-4">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={staleAlertsEnabled}
+                  onChange={(e) => setStaleAlertsEnabled(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Enable stale-deal email alerts
+              </label>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Alert after (days without activity)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={90}
+                  value={staleAlertDays}
+                  onChange={(e) => setStaleAlertDays(Number(e.target.value))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  disabled={savingAutomation}
+                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {savingAutomation ? 'Saving...' : 'Save automation'}
+                </button>
+                <button
+                  type="button"
+                  disabled={runningStaleAlerts}
+                  onClick={() => void handleRunStaleAlerts()}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {runningStaleAlerts ? 'Running...' : 'Run alerts now'}
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Workspace</h2>
           {organizations.length > 1 && (
@@ -491,9 +587,6 @@ export function SettingsPage() {
                 onChange={(e) => setOrgName(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
-              {message && (
-                <p className="mt-2 text-sm text-slate-600">{message}</p>
-              )}
               <button
                 type="submit"
                 disabled={saving}

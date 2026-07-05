@@ -46,14 +46,18 @@ enum IntegrationProvider {
 }
 
 model Organization {
-  id                 String   @id @default(cuid())
-  name               String
-  slug               String   @unique
-  emailLogToken      String?  @unique
-  googleClientId     String?
-  googleClientSecret String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                     String    @id @default(cuid())
+  name                   String
+  slug                   String    @unique
+  emailLogToken          String?   @unique
+  leadCaptureToken       String?   @unique
+  googleClientId         String?
+  googleClientSecret     String?
+  staleDealAlertsEnabled Boolean   @default(true)
+  staleDealAlertDays     Int       @default(7)
+  lastStaleDealAlertAt   DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   memberships Membership[]
   accounts    Account[]
@@ -73,6 +77,8 @@ model User {
   pendingEmail           String?
   emailChangeTokenHash   String?
   emailChangeExpiresAt   DateTime?
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
@@ -222,6 +228,8 @@ model Deal {
   arr            Float?
   probability    Int       @default(20)
   closeDate      DateTime?
+  riskLevel      String?
+  riskNote       String?
   externalSource String?
   externalId     String?
   createdAt      DateTime  @default(now())

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../../shared/components/PageHeader'
+import { MeetingListSkeleton } from '../../shared/components/Skeleton'
 import { api } from '../../shared/api/client'
 import type { MeetingRecord } from '../../shared/types/meeting'
 import { MeetingSummaryPanel } from './MeetingSummaryPanel'
@@ -38,7 +39,7 @@ export function MeetingsPage() {
         </h2>
 
         {loading ? (
-          <p className="text-sm text-slate-500">Loading meetings...</p>
+          <MeetingListSkeleton />
         ) : meetings.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm text-slate-500">
             No saved meetings yet. Generate a summary with &quot;Save meeting to

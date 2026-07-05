@@ -83,7 +83,21 @@ export async function buildPipelineForecast(
   const forecastPipeline = stageForecast.reduce((s, row) => s + row.expectedValue, 0)
 
   const staleThreshold = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
-  const staleDealCount = openDeals.filter((d) => d.updatedAt < staleThreshold).length
+  const staleWhere = {
+    organizationId,
+    stage: { in: [...OPEN_STAGES] },
+    updatedAt: { lt: staleThreshold },
+    ...repFilter,
+  }
+  const [staleDealCount, staleDeals] = await Promise.all([
+    prisma.deal.count({ where: staleWhere }),
+    prisma.deal.findMany({
+      where: staleWhere,
+      select: { id: true, title: true, updatedAt: true, stage: true },
+      orderBy: { updatedAt: 'asc' },
+      take: 10,
+    }),
+  ])
 
   const bottleneck = [...stageForecast].sort((a, b) => b.count - a.count)[0]
 
@@ -102,6 +116,7 @@ export async function buildPipelineForecast(
       score: healthScore,
       label: healthLabel,
       staleDealCount,
+      staleDeals,
       bottleneckStage: bottleneck?.count > 2 ? bottleneck.stage : null,
       dealsAtRisk: staleDealCount,
     },

@@ -25,7 +25,7 @@ export function OnboardingWizard({ status, onDismiss }: OnboardingWizardProps) {
   const doneCount = STEPS.filter((s) => status.steps[s.key]).length
 
   return (
-    <section className="mb-8 rounded-xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-6 shadow-sm">
+    <section className="card mb-8 overflow-hidden border-brand-200/60 bg-gradient-to-br from-brand-50/80 via-white to-white p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">

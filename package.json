@@ -19,7 +19,9 @@
     "db:studio": "npm run db:studio --workspace=packages/api",
     "test:api": "npm run test --workspace=packages/api",
     "test:web": "npm run test --workspace=apps/web",
+    "check:prisma-schemas": "node packages/api/scripts/check-prisma-schema-sync.mjs",
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "seed:demo": "npm run db:push --workspace=packages/api && node packages/api/scripts/seed-demo.mjs",
     "generate:deploy-secrets": "node scripts/generate-deploy-secrets.mjs"
   },
   "devDependencies": {

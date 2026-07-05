@@ -6,6 +6,15 @@ const skipInTest =
   process.env.VITEST === 'true' ||
   process.env.RATE_LIMIT_DISABLED === '1'
 
+export function isRateLimitDisabled() {
+  return skipInTest
+}
+
+const isProduction = process.env.NODE_ENV === 'production'
+
+export const GLOBAL_RATE_LIMIT_MAX = isProduction ? 100 : 5000
+export const GLOBAL_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+
 function ipKey(req: Request) {
   return req.ip ?? 'unknown'
 }
@@ -57,17 +66,20 @@ export const changePasswordLimiter = limiter(15 * 60 * 1000, 5, userKey)
 export const logoutAllLimiter = limiter(60 * 60 * 1000, 10, userKey)
 export const teamInviteLimiter = limiter(60 * 60 * 1000, 20, orgKey)
 export const teamResendLimiter = limiter(60 * 60 * 1000, 5, userKey)
+export const forgotPasswordLimiter = limiter(60 * 60 * 1000, 5, ipKey)
+export const resetPasswordLimiter = limiter(60 * 60 * 1000, 10, ipKey)
+export const publicLeadLimiter = limiter(15 * 60 * 1000, 30, ipKey)
 
 /** LLM-backed endpoints — per user to limit cost abuse. */
 export const aiLimiter = limiter(60 * 60 * 1000, 30, userKey)
 
 /** Broad API abuse protection — auth routes have their own stricter limits. */
 export const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: GLOBAL_RATE_LIMIT_WINDOW_MS,
+  max: GLOBAL_RATE_LIMIT_MAX,
   keyGenerator: ipKey,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => skipInTest || req.path === '/api/health',
+  skip: (req) => skipInTest || req.path === '/api/health' || req.path.startsWith('/api/public'),
   message: { error: 'Too many requests. Try again later.' },
 })

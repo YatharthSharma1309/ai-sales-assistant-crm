@@ -4,6 +4,8 @@ import {
   ACTIVITY_TYPE_COLORS,
   ACTIVITY_TYPE_LABELS,
 } from '../constants/activities'
+import { useDialog } from './DialogProvider'
+import { TimelineSkeleton } from './Skeleton'
 
 const ICONS: Record<ActivityType, typeof StickyNote> = {
   NOTE: StickyNote,
@@ -37,8 +39,10 @@ export function ActivityTimeline({
   onDeleteActivity,
   onUpdateActivity,
 }: ActivityTimelineProps) {
+  const { confirm, prompt } = useDialog()
+
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading timeline...</p>
+    return <TimelineSkeleton />
   }
 
   if (activities.length === 0) {
@@ -105,13 +109,13 @@ export function ActivityTimeline({
                     {onUpdateActivity && (
                       <button
                         type="button"
-                        onClick={() => {
-                          const title = window.prompt(
-                            'Edit title',
-                            activity.title,
-                          )
-                          if (title === null || !title.trim()) return
-                          onUpdateActivity(activity.id, { title: title.trim() })
+                        onClick={async () => {
+                          const title = await prompt({
+                            title: 'Edit title',
+                            defaultValue: activity.title,
+                          })
+                          if (!title) return
+                          onUpdateActivity(activity.id, { title })
                         }}
                         className="text-xs font-medium text-slate-600 hover:text-slate-800"
                       >
@@ -121,14 +125,15 @@ export function ActivityTimeline({
                     {onDeleteActivity && (
                       <button
                         type="button"
-                        onClick={() => {
-                          if (
-                            window.confirm(
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: 'Delete activity',
+                            message:
                               'Delete this activity from the timeline?',
-                            )
-                          ) {
-                            onDeleteActivity(activity.id)
-                          }
+                            confirmLabel: 'Delete',
+                            destructive: true,
+                          })
+                          if (ok) onDeleteActivity(activity.id)
                         }}
                         className="text-xs font-medium text-red-600 hover:text-red-700"
                       >

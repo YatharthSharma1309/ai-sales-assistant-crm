@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { DetailPageSkeleton } from './Skeleton'
 
 type DetailLoadStateProps = {
   record: unknown
@@ -35,7 +36,7 @@ export function DetailLoadState({
   }
 
   if (!record) {
-    return <p className="text-sm text-slate-500">Loading...</p>
+    return <DetailPageSkeleton />
   }
 
   return <>{children}</>

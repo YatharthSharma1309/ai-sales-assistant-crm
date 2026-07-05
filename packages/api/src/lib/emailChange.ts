@@ -41,13 +41,17 @@ export async function sendEmailChangeNotification(
   to: string,
   newEmail: string,
 ): Promise<void> {
-  await sendEmail({
-    to,
-    subject: 'Email change requested — AI Sales Assistant CRM',
-    body: [
-      `A request was made to change your account email to ${newEmail}.`,
-      '',
-      'If this was not you, sign in and change your password immediately.',
-    ].join('\n'),
-  })
+  try {
+    await sendEmail({
+      to,
+      subject: 'Email change requested — AI Sales Assistant CRM',
+      body: [
+        `A request was made to change your account email to ${newEmail}.`,
+        '',
+        'If this was not you, sign in and change your password immediately.',
+      ].join('\n'),
+    })
+  } catch {
+    // Notification to the old address is best-effort.
+  }
 }

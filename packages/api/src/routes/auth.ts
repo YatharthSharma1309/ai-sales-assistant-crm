@@ -28,6 +28,8 @@ import {
   emailChangeLimiter,
   changePasswordLimiter,
   logoutAllLimiter,
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
 } from '../middleware/rateLimit.js'
 import { hashInviteToken } from '../lib/inviteToken.js'
 import {
@@ -37,6 +39,12 @@ import {
   sendEmailChangeVerification,
   sendEmailChangeNotification,
 } from '../lib/emailChange.js'
+import {
+  generatePasswordResetToken,
+  passwordResetExpiresAt,
+  buildPasswordResetUrl,
+  sendPasswordResetEmail,
+} from '../lib/passwordReset.js'
 
 const router = Router()
 
@@ -70,6 +78,15 @@ const emailChangeSchema = z.object({
 
 const verifyEmailChangeSchema = z.object({
   token: z.string().min(1),
+})
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+})
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8),
 })
 
 async function listUserOrganizations(userId: string) {
@@ -149,6 +166,86 @@ router.post('/register', registerLimiter, async (req, res) => {
       role: 'ADMIN',
     }),
   )
+})
+
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
+  const parsed = forgotPasswordSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() })
+    return
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: parsed.data.email },
+  })
+
+  // Always return success to avoid email enumeration
+  if (!user) {
+    res.json({
+      ok: true,
+      message: 'If that email exists, a reset link has been sent.',
+    })
+    return
+  }
+
+  const { raw, hash } = generatePasswordResetToken()
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordResetTokenHash: hash,
+      passwordResetExpiresAt: passwordResetExpiresAt(),
+    },
+  })
+
+  const resetUrl = buildPasswordResetUrl(raw)
+  const emailResult = await sendPasswordResetEmail(user.email, resetUrl)
+
+  const payload: Record<string, unknown> = {
+    ok: true,
+    message: 'If that email exists, a reset link has been sent.',
+    emailSent: emailResult.sent,
+  }
+  if (process.env.NODE_ENV !== 'production' && !emailResult.sent) {
+    payload.resetUrl = resetUrl
+    payload.devNote = emailResult.message
+  }
+
+  res.json(payload)
+})
+
+router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
+  const parsed = resetPasswordSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() })
+    return
+  }
+
+  const tokenHash = hashToken(parsed.data.token)
+  const user = await prisma.user.findFirst({
+    where: {
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpiresAt: { gt: new Date() },
+    },
+  })
+
+  if (!user) {
+    res.status(400).json({ error: 'Invalid or expired reset link' })
+    return
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.password, 10)
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      passwordResetTokenHash: null,
+      passwordResetExpiresAt: null,
+    },
+  })
+
+  await revokeAllSessions(user.id)
+
+  res.json({ ok: true, message: 'Password updated. You can sign in now.' })
 })
 
 router.post('/login', loginLimiter, async (req, res) => {
@@ -378,7 +475,7 @@ router.patch('/me/email', protectedMiddleware, emailChangeLimiter, async (req, r
     },
   })
 
-  await sendEmailChangeVerification(newEmail, verifyUrl)
+  const emailResult = await sendEmailChangeVerification(newEmail, verifyUrl)
   await sendEmailChangeNotification(user.email, newEmail)
 
   const devVerifyUrl =
@@ -386,8 +483,14 @@ router.patch('/me/email', protectedMiddleware, emailChangeLimiter, async (req, r
 
   res.json({
     ok: true,
-    message: 'Verification email sent to your new address',
+    message: emailResult.sent
+      ? 'Verification email sent to your new address'
+      : 'Email change pending — use the verification link below (dev) or check Resend configuration',
     verifyUrl: devVerifyUrl,
+    emailSent: emailResult.sent,
+    ...(process.env.NODE_ENV !== 'production' && !emailResult.sent
+      ? { devNote: emailResult.message }
+      : {}),
   })
 })
 

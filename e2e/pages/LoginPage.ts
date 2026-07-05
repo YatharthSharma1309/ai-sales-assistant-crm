@@ -23,5 +23,5 @@ export class LoginPage {
     await this.page.waitForURL((url) => new URL(url).pathname === '/')
   }
 
-  heading = () => this.page.getByRole('heading', { name: 'Sign in' })
+  heading = () => this.page.getByRole('heading', { name: 'Welcome back' })
 }

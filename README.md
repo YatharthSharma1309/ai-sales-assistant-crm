@@ -1,413 +1,233 @@
 # AI Sales Assistant CRM
 
-CRM for B2B SaaS sales teams with lead management, pipeline tracking, AI-powered follow-up emails, and live integrations with HubSpot, Salesforce, Google Calendar, and Gmail.
+A full-stack **B2B sales CRM** for SaaS teams: leads, pipeline Kanban, AI follow-up emails, meeting summaries, team roles, integrations (Google, HubSpot, Salesforce), and analytics.
+
+> **New here?** Start with the **[Beginner simulation](docs/BEGINNER_SIMULATION.md)** — load demo data in one command and follow a guided 30-minute walkthrough.
+
+## Quick start (5 minutes)
+
+```bash
+git clone https://github.com/YatharthSharma1309/ai-sales-assistant-crm.git
+cd ai-sales-assistant-crm
+npm install
+cp packages/api/.env.example packages/api/.env   # edit JWT_SECRET if you like
+npm run db:push
+npm run seed:demo      # optional: sample accounts, leads, deals
+npm run dev:all
+```
+
+| | |
+|---|---|
+| **App** | [http://localhost:5173](http://localhost:5173) |
+| **API** | [http://localhost:3001](http://localhost:3001) |
+| **Demo login** | `demo@example.com` / `DemoPass123!` (after `seed:demo`) |
+
+See **[docs/BEGINNER_SIMULATION.md](docs/BEGINNER_SIMULATION.md)** for what to click on each page.
+
+---
 
 ## Features
 
 ### Auth & security
-- **Dual-token sessions** — 15-minute access JWT + httpOnly refresh cookie with rotation, reuse detection, and sliding/absolute TTL (`AuthSession` table)
-- **Magic-link team invites** — Email invite links; no temporary passwords
-- **Verified email change** — Re-auth + confirmation link to new address
-- **Session control** — Per-device logout, sign out everywhere, revoke on password/email change
+- Dual-token sessions (15m JWT + httpOnly refresh cookie, rotation + reuse detection)
+- Magic-link team invites, verified email change, **forgot / reset password**
+- Per-device sessions, sign out everywhere, rate limiting
 
 ### Core CRM
-- **Multi-tenant workspaces** — Register, login, switch organizations
-- **Accounts & contacts** — B2B company and people management with detail pages
-- **Lead management** — Search, filter, CSV import, scoring (0–100), detail pages
-- **Pipeline** — Drag-and-drop Kanban with per-stage pagination, deal detail pages, weighted forecast
-- **Activity timeline** — Notes, calls, emails, meetings, tasks on leads/contacts/deals
-- **Team & RBAC** — ADMIN / MANAGER / REP roles, magic-link invites, manager dashboard
-- **Assignment** — Reps see only their assigned leads and deals
-- **Onboarding** — Guided setup wizard for new workspaces
-- **Paginated lists** — Accounts, contacts, leads, deals, and activities use `{ data, pagination }`
+- Multi-tenant workspaces, accounts, contacts, leads (scoring, CSV import)
+- Drag-and-drop **pipeline Kanban**, deal detail pages, weighted forecast
+- Activity timeline on leads, contacts, deals
+- **Global search**, mobile bottom nav, in-app **Help** page
+- Team RBAC: ADMIN / MANAGER / REP; rep-scoped records
 
 ### AI & communications
-- **AI emails** — Context-aware drafts from leads/deals (OpenRouter or mock mode)
-- **Meeting summaries** — AI summaries from pasted notes; action items as tasks
-- **Email send** — Resend integration from AI drafts (optional)
-- **BCC email logging** — Outbound emails auto-BCC a workspace address; inbound webhook logs to timeline
+- AI email drafts and meeting summaries (OpenRouter or **mock mode**)
+- Resend outbound email (optional); BCC email logging to timeline
 
-### Analytics
-- **Dashboard metrics** — Lead/deal counts, pipeline ARR, weighted forecast
-- **Pipeline forecast** — Stage breakdown, win rate, pipeline health score
-- **Lead scoring** — Auto-calculated from status, source, job title, recent engagement
+### Automation & marketing
+- **Stale-deal alerts** — email managers when deals stall (Settings → Automation)
+- **Public lead capture form** — embed on your site (Integrations)
+- Lead score recalculation (managers)
 
 ### Integrations
+- Google Calendar & Gmail, HubSpot, Salesforce (OAuth, sync, webhooks, CSV import)
 
-| Integration | Capabilities |
-|-------------|--------------|
-| **Google Calendar** | OAuth, manual + auto-sync meetings to timeline |
-| **Gmail** | OAuth, sync recent inbox emails to timeline |
-| **HubSpot** | OAuth or private app token, live sync, inbound webhooks, outbound push |
-| **Salesforce** | Token + instance URL sync, inbound webhooks (Flow/Apex), outbound push |
-| **CSV import** | HubSpot contacts/deals; Salesforce contacts/leads/opportunities |
+### Analytics
+- Dashboard metrics, lead funnel, deal outcomes, trends, manager team view
+
+---
 
 ## Tech stack
 
 | Layer | Tech |
 |-------|------|
-| Frontend | React 19, TypeScript, Redux Toolkit, Tailwind, Vite, React Router |
+| Frontend | React 19, TypeScript, Redux Toolkit, Tailwind, Vite |
 | Backend | Node.js, Express 5, Prisma 6 |
-| Shared | `@crm/shared` — pipeline stages and constants |
-| Database | SQLite (local dev), PostgreSQL (production) |
+| Shared | `@crm/shared` — pipeline stages |
+| Database | SQLite (local), PostgreSQL (production) |
+| Tests | Vitest (67 unit), Playwright (17 E2E) |
+
+---
 
 ## Project structure
 
 ```
 ai-sales-assistant-crm/
-├── apps/
-│   └── web/                    # React 19 + Vite SPA (see apps/web/README.md)
-│       └── src/features/       # auth, team, pipeline, leads, settings, …
-├── packages/
-│   ├── api/                    # Express 5 API + Prisma
-│   │   ├── prisma/
-│   │   │   ├── schema.prisma           # SQLite (dev)
-│   │   │   ├── schema.postgresql.prisma
-│   │   │   └── migrations/             # incl. auth_invites_sessions
-│   │   └── src/
-│   │       ├── routes/                 # auth, team, leads, deals, …
-│   │       ├── lib/                    # authSession, inviteToken, emailChange
-│   │       └── __tests__/              # Vitest unit tests
-│   └── shared/                 # @crm/shared pipeline constants
-├── e2e/                        # Playwright smoke tests
-│   ├── playwright.config.ts    # API :3011, web :5174 (isolated from dev)
-│   ├── global-setup.ts         # Fresh e2e.db per run
-│   ├── fixtures/               # users, auth helpers
-│   └── tests/smoke/            # login, session, RBAC, layout
-├── scripts/
-│   ├── live-test.ps1           # Quick API smoke (port 3001)
-│   └── live-test-extended.ps1  # Full API regression incl. invites + refresh
-├── .github/workflows/ci.yml    # unit → e2e on Node 22
-├── railway.toml / render.yaml  # API deploy configs
-├── README.md
-└── DEPLOY.md
+├── apps/web/                 # React SPA → apps/web/README.md
+├── packages/api/             # Express API → packages/api/README.md
+├── packages/shared/          # Shared constants
+├── docs/
+│   └── BEGINNER_SIMULATION.md  # Guided walkthrough for new users
+├── e2e/                      # Playwright smoke tests
+├── scripts/                  # live-test.ps1, deploy helpers
+├── README.md                 # This file
+└── DEPLOY.md                 # Production deployment
 ```
 
-## Setup
+---
 
-### 1. Install dependencies
+## Setup (detailed)
 
-```bash
-npm install
-```
+### 1. Environment
 
-### 2. Configure environment
-
-Copy `packages/api/.env.example` to `packages/api/.env` and set at minimum:
+Copy `packages/api/.env.example` → `packages/api/.env`:
 
 ```env
 DATABASE_URL="file:./dev.db"
 JWT_SECRET="change-me-in-production"
-REFRESH_TOKEN_TTL_DAYS=30
-INVITE_EXPIRY_HOURS=168
 FRONTEND_URL="http://localhost:5173"
+RATE_LIMIT_DISABLED=1          # recommended for local dev
 ```
 
-Access tokens expire in **15 minutes**. Refresh tokens live in an **httpOnly cookie** with a **30-day sliding** window (`REFRESH_TOKEN_TTL_DAYS`) capped at **90 days** absolute (`REFRESH_TOKEN_ABSOLUTE_TTL_DAYS`). Team invite links default to **7 days** (`INVITE_EXPIRY_HOURS=168`).
+Access tokens expire in **15 minutes**. Refresh cookies use sliding TTL (`REFRESH_TOKEN_TTL_DAYS`, default 30).
 
-### 3. Initialize database
+### 2. Database
 
 ```bash
 npm run db:push
+npm run seed:demo    # creates demo@example.com workspace with sample CRM data
 ```
 
-### 4. Run the app
-
-**Both services:**
+### 3. Run
 
 ```bash
-npm run dev:all
+npm run dev:all      # API :3001 + web :5173
 ```
 
-**Or separately:**
+### 4. Scripts
 
-```bash
-npm run dev:api    # API on http://localhost:3001
-npm run dev        # Frontend on http://localhost:5173
-```
+| Command | Description |
+|---------|-------------|
+| `npm run dev:all` | API + frontend |
+| `npm run dev:api` | API only |
+| `npm run dev` | Frontend only |
+| `npm run seed:demo` | Reset demo workspace + sample data |
+| `npm run test:api` | API unit tests (57) |
+| `npm run test:web` | Web unit tests (10) |
+| `npm run test:e2e` | Playwright E2E (17) |
+| `npm run build` | Production web build |
+| `npm run build:api` | Production API build |
+| `npm run check:prisma-schemas` | Verify SQLite/PG schema parity |
 
-### 5. Open the app
-
-Visit [http://localhost:5173](http://localhost:5173), create a workspace, and explore.
+---
 
 ## Environment variables
 
-See `packages/api/.env.example` for the full list. Key groups:
+Full list in `packages/api/.env.example`. Summary:
 
 | Group | Variables |
 |-------|-----------|
-| **Core** | `DATABASE_URL`, `JWT_SECRET`, `REFRESH_TOKEN_TTL_DAYS`, `REFRESH_TOKEN_ABSOLUTE_TTL_DAYS`, `INVITE_EXPIRY_HOURS`, `PORT`, `FRONTEND_URL`, `CORS_ORIGINS`, `TRUST_PROXY`, `REFRESH_COOKIE_SAME_SITE` |
-| **AI & email** | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL` |
-| **BCC logging** | `EMAIL_LOG_DOMAIN`, `INBOUND_EMAIL_WEBHOOK_SECRET` |
-| **Google** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` |
-| **Gmail** | `GMAIL_REDIRECT_URI`, `GMAIL_SYNC_ENABLED`, `GMAIL_SYNC_INTERVAL_MS` |
-| **HubSpot** | `HUBSPOT_CLIENT_ID`, `HUBSPOT_CLIENT_SECRET`, `HUBSPOT_REDIRECT_URI` |
-| **Webhooks** | `API_PUBLIC_URL` (required for HubSpot signature verification in prod) |
-| **Calendar sync** | `CALENDAR_SYNC_ENABLED`, `CALENDAR_SYNC_INTERVAL_MS`, `CRON_SECRET` |
+| **Core** | `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`, `CORS_ORIGINS`, `RATE_LIMIT_DISABLED` |
+| **AI & email** | `OPENROUTER_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL` |
+| **Automation** | `STALE_DEAL_ALERTS_ENABLED`, `CRON_SECRET` |
+| **Google** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| **HubSpot / Salesforce** | OAuth client IDs, `API_PUBLIC_URL` for webhooks |
 
-Without OpenRouter, AI endpoints use mock mode. Without Resend, use **Copy** on email drafts.
+**Dev email behavior:** Without `RESEND_API_KEY`, emails are mocked. With Resend in test mode, API errors return `sent: false` in development instead of crashing routes — invite/reset links still appear in the UI.
 
-## API routes
+Without `OPENROUTER_API_KEY`, AI endpoints return realistic mock drafts.
 
-### Auth & profile
+---
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | `/api/auth/register` | Create user + organization (returns access + refresh tokens) |
-| POST | `/api/auth/login` | Sign in (multi-org selection supported) |
-| POST | `/api/auth/refresh` | Rotate refresh token for new access token |
-| POST | `/api/auth/logout` | Revoke current session (`{ refreshToken }`) |
-| POST | `/api/auth/logout-all` | Revoke all sessions except current |
-| GET | `/api/auth/sessions` | List active sessions (device, IP, last active) |
-| DELETE | `/api/auth/sessions/:id` | Revoke a single session |
-| GET | `/api/auth/me` | Current user + organizations |
-| PATCH | `/api/auth/me` | Update profile name |
-| PATCH | `/api/auth/me/email` | Request verified email change |
-| DELETE | `/api/auth/me/email` | Cancel pending email change |
-| POST | `/api/auth/verify-email-change` | Confirm new email via magic link |
-| POST | `/api/auth/change-password` | Change password (revokes other sessions) |
-| POST | `/api/auth/switch-org` | Switch workspace |
-| GET | `/api/auth/invite/:token` | Preview team invite (public) |
-| POST | `/api/auth/accept-invite` | Accept team invite (public) |
+## API overview
 
-### CRM records
+### Auth
+`POST /api/auth/register`, `/login`, `/refresh`, `/logout`, `/forgot-password`, `/reset-password`, `/me`, `/me/email`, team invites, sessions
 
-List endpoints accept `?page=1&pageSize=25` (max 100). Responses: `{ data, pagination }`.
+### CRM
+`/api/accounts`, `/contacts`, `/leads`, `/deals`, `/deals/kanban`, `/activities` — paginated `{ data, pagination }`
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET/POST | `/api/accounts` | List / create accounts |
-| GET/PATCH/DELETE | `/api/accounts/:id` | Account detail |
-| GET/POST | `/api/contacts` | List / create contacts |
-| GET/PATCH/DELETE | `/api/contacts/:id` | Contact detail |
-| GET/POST | `/api/leads` | List / create leads |
-| GET/PATCH/DELETE | `/api/leads/:id` | Lead detail |
-| POST | `/api/leads/import` | Bulk import (manager) |
-| POST | `/api/leads/recalculate-scores` | Recalculate all lead scores (manager) |
-| GET/POST/PATCH/DELETE | `/api/deals` | List / create / update / delete deals |
-| GET | `/api/deals/kanban` | Per-stage Kanban columns (`?perStage=15&page_DISCOVERY=2`) |
-| GET/POST/PATCH/DELETE | `/api/activities` | Timeline (`?leadId=` / `contactId` / `dealId`) |
+### Newer endpoints
+| Route | Description |
+|-------|-------------|
+| `GET /api/search?q=` | Global search (leads, contacts, accounts, deals) |
+| `POST /api/public/leads` | Public lead capture form submit |
+| `GET /api/organization/lead-capture` | Form URL for workspace |
+| `GET/PATCH /api/organization/automation` | Stale-deal alert settings |
+| `POST /api/automation/stale-deal-alerts/run` | Manual alert run (manager) |
 
-### AI, meetings & communications
+See inline route tables in older commits or explore `packages/api/src/routes/`.
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/ai/context` | Preview CRM context for lead/deal |
-| POST | `/api/ai/generate-email` | AI follow-up draft |
-| POST | `/api/ai/summarize-meeting` | AI meeting summary + optional tasks |
-| GET | `/api/meetings` | Recent saved meeting summaries |
-| POST | `/api/communications/send` | Send email via Resend (auto-BCC log address) |
-| POST | `/api/communications/inbound` | Inbound email webhook (BCC logging) |
-
-### Dashboard & team
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/dashboard/stats` | Dashboard metrics |
-| GET | `/api/dashboard/forecast` | Pipeline forecast + health |
-| GET | `/api/dashboard/manager` | Manager pipeline + rep leaderboard |
-| GET | `/api/dashboard/onboarding` | Onboarding step status |
-| GET | `/api/team` | Team members (manager) |
-| GET | `/api/team/invites` | Pending magic-link invites (manager) |
-| POST | `/api/team/invite` | Send magic-link invite (admin/manager) |
-| POST | `/api/team/invites/:id/resend` | Resend invite email |
-| DELETE | `/api/team/invites/:id` | Revoke pending invite (admin) |
-| DELETE | `/api/team/:membershipId` | Remove teammate (admin) |
-| GET/PATCH | `/api/organization` | Workspace settings |
-| GET | `/api/organization/email-log` | BCC email logging address |
-
-### Integrations
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/integrations/status` | Connection status for all integrations |
-| GET | `/api/integrations/google/auth-url` | Google Calendar OAuth URL |
-| GET | `/api/integrations/google/callback` | Google Calendar OAuth callback |
-| POST | `/api/integrations/google/sync` | Manual calendar sync |
-| DELETE | `/api/integrations/google` | Disconnect calendar |
-| GET | `/api/integrations/gmail/auth-url` | Gmail OAuth URL |
-| GET | `/api/integrations/gmail/callback` | Gmail OAuth callback |
-| POST | `/api/integrations/gmail/sync` | Sync inbox emails to timeline |
-| DELETE | `/api/integrations/gmail` | Disconnect Gmail |
-| GET | `/api/integrations/hubspot/auth-url` | HubSpot OAuth URL |
-| GET | `/api/integrations/hubspot/callback` | HubSpot OAuth callback |
-| POST | `/api/integrations/hubspot/connect` | Connect HubSpot private app token |
-| POST | `/api/integrations/hubspot/sync` | Sync contacts/deals from HubSpot |
-| DELETE | `/api/integrations/hubspot` | Disconnect HubSpot |
-| POST | `/api/integrations/hubspot/import-csv` | HubSpot CSV import |
-| POST | `/api/integrations/hubspot/webhook` | HubSpot inbound webhook (v3 signature) |
-| POST | `/api/integrations/salesforce/connect` | Connect Salesforce (token + instance URL) |
-| POST | `/api/integrations/salesforce/sync` | Sync from Salesforce |
-| DELETE | `/api/integrations/salesforce` | Disconnect Salesforce |
-| POST | `/api/integrations/salesforce/import-csv` | Salesforce CSV import |
-| POST | `/api/integrations/salesforce/webhook` | Salesforce inbound webhook |
-| POST | `/api/integrations/cron/calendar-sync` | Cron-triggered calendar sync (`x-cron-secret`) |
-
-## CSV import format (leads)
-
-```csv
-title,source,status,notes
-Acme Corp — VP Eng,Inbound,NEW,Met at SaaStr
-Beta Inc — CTO,Referral,CONTACTED,Intro from investor
-```
-
-HubSpot and Salesforce CSV column requirements are shown on the **Integrations** page in the app.
+---
 
 ## Roles
 
 | Role | Access |
 |------|--------|
-| **ADMIN** | Full access, invite team, change roles, workspace settings |
-| **MANAGER** | Team dashboard, analytics, integrations, view all team records |
-| **REP** | Assigned leads/deals, pipeline, AI tools, own integrations |
+| **ADMIN** | Full access, workspace settings, team invites |
+| **MANAGER** | All team records, analytics, integrations, automation |
+| **REP** | Assigned leads/deals only |
 
-## Production
-
-Deploy without Docker — see **[DEPLOY.md](./DEPLOY.md)** for the full guide.
-
-| Layer | Platform |
-|-------|----------|
-| Frontend | Vercel (`apps/web`) |
-| API + DB | Railway (`railway.toml`) or Render (`render.yaml`) |
-
-```bash
-npm run build:api
-npm run start:api   # prisma migrate deploy + node (requires DATABASE_URL=postgresql://...)
-```
-
-Production uses `packages/api/prisma/schema.postgresql.prisma` and migrations in `packages/api/prisma/migrations/`.
-
-Set `VITE_API_URL` on Vercel to your production API URL (no trailing slash).
-
-## Background jobs
-
-**Calendar auto-sync** (`packages/api/.env`):
-
-```env
-CALENDAR_SYNC_ENABLED=true
-CALENDAR_SYNC_INTERVAL_MS=3600000
-```
-
-**Gmail auto-sync:**
-
-```env
-GMAIL_SYNC_ENABLED=true
-GMAIL_SYNC_INTERVAL_MS=1800000
-```
-
-Or use external cron:
-
-```http
-POST https://YOUR_API_URL/api/integrations/cron/calendar-sync
-x-cron-secret: YOUR_CRON_SECRET
-```
-
-## Webhook setup (production)
-
-**HubSpot** — In your HubSpot app settings, set the target URL to `https://YOUR_API_URL/api/integrations/hubspot/webhook`. Subscribe to `contact.creation`, `contact.propertyChange`, `deal.creation`, `deal.propertyChange`. Set `API_PUBLIC_URL` and `HUBSPOT_CLIENT_SECRET` on the API.
-
-**Salesforce** — Use a Flow or Apex HTTP callout to `POST https://YOUR_API_URL/api/integrations/salesforce/webhook` with header `x-salesforce-webhook-secret` (shown after connecting in Integrations).
-
-**BCC email** — Forward your email provider's inbound webhook to `POST /api/communications/inbound` with header `x-webhook-secret`.
-
-## Data deletion
-
-Managers can delete accounts and contacts. Managers and assigned reps can delete leads and deals. Activity authors (or managers) can delete timeline entries. See Prisma `onDelete` rules in `packages/api/prisma/schema.prisma`.
+---
 
 ## Tests
 
 ```bash
-npm run test:api    # API unit tests (Vitest, 37+ tests)
-npm run test:web    # Frontend unit tests (Vitest)
-npm run test:e2e    # Playwright smoke tests — self-starts API + web
-```
-
-**E2E** uses isolated ports **3011** (API) and **5174** (web) so it does not conflict with `dev:all` on 3001/5173. First run:
-
-```bash
-npx playwright install chromium
+npm run test:api
+npm run test:web
+npx playwright install chromium   # first time only
 npm run test:e2e
 ```
 
-**Live API regression** (API must be running on `:3001`):
+E2E uses isolated ports **3011** (API) and **5174** (web). Local dev uses **3001** / **5173**.
+
+PowerShell API smoke (API must be running):
 
 ```powershell
-.\scripts\live-test-extended.ps1
+.\scripts\live-test.ps1
+node packages/api/scripts/smoke-features.mjs
 ```
 
-### CI (GitHub Actions)
+---
 
-`.github/workflows/ci.yml` runs on push/PR:
+## Production
 
-1. **unit** — `npm run test:api` + `npm run test:web` (Node 22)
-2. **e2e** — `npm run test:e2e` with Playwright Chromium
+Deploy without Docker — see **[DEPLOY.md](./DEPLOY.md)**.
 
-## NPM scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm run dev:all` | API + frontend concurrently |
-| `npm run dev:api` | API only (watch mode, port 3001) |
-| `npm run dev` | Frontend only (port 5173) |
-| `npm run build` | Build web app |
-| `npm run build:shared` | Build `@crm/shared` |
-| `npm run build:api` | Build API for production |
-| `npm run start:api` | Migrate DB + start API |
-| `npm run db:push` | Push SQLite schema (dev) |
-| `npm run db:push:pg` | Push PostgreSQL schema (local PG test) |
-| `npm run db:studio` | Prisma Studio |
-| `npm run test:api` | API unit tests |
-| `npm run test:web` | Web unit tests |
-| `npm run test:e2e` | Playwright E2E smoke suite |
-
-## Security hardening
-
-Post-MVP auth, session, and test infrastructure improvements.
-
-### High priority — Auth security
-
-| Item | Implementation |
-|------|----------------|
-| **httpOnly refresh cookies** | `crm_refresh` cookie via `packages/api/src/lib/refreshCookie.ts`; frontend uses `credentials: 'include'`; refresh token removed from `localStorage`; silent restore via `tryRestoreSession()` on protected routes |
-| **Refresh reuse detection** | Insert-per-rotate in `authSession.ts`: spent token replay revokes the whole `familyId` and returns `REFRESH_REUSE` |
-| **Rate limiting** | `express-rate-limit` in `packages/api/src/middleware/rateLimit.ts` on login, register, refresh, logout, invites, email change, password change, team invite/resend |
-
-### Medium priority — E2E
-
-| Item | Implementation |
-|------|----------------|
-| **Playwright `storageState`** | `e2e/.auth/{admin,manager,rep}.json` saved in `auth.setup.ts`; `layout` + `team-permissions` use pre-authenticated projects |
-| **Page Object Model** | `e2e/pages/LoginPage.ts`, `AppLayoutPage.ts`, `TeamPage.ts` |
-
-### Low priority — Sessions & TTL
-
-| Item | Implementation |
-|------|----------------|
-| **Per-session UI in Settings** | `GET /api/auth/sessions`, `DELETE /api/auth/sessions/:id`; device list with revoke + sign out everywhere |
-| **Absolute + sliding TTL** | `REFRESH_TOKEN_TTL_DAYS` (30d sliding) capped by `REFRESH_TOKEN_ABSOLUTE_TTL_DAYS` (90d max) |
-
-### CI & testing
-
-| Item | Implementation |
-|------|----------------|
-| **Vitest on Linux** | `apps/web/vitest.config.ts` (`environment: 'node'`); optional `@rolldown/binding-linux-x64-gnu`; CI installs Linux binding after `npm ci` |
-| **Regression scripts** | `scripts/live-test-extended.ps1` uses cookie jar (`WebSession`) for refresh rotation |
-
-Run the full suite:
+| Layer | Platform |
+|-------|----------|
+| Frontend | Vercel (`VITE_API_URL` → your API) |
+| API + DB | Railway or Render |
 
 ```bash
-npm run test:api    # API unit tests
-npm run test:web    # Frontend unit tests
-npm run test:e2e    # Playwright smoke (14 specs)
+npm run build:api
+npm run start:api
 ```
 
-### Auth environment variables
+---
 
-```env
-REFRESH_TOKEN_TTL_DAYS=30
-REFRESH_TOKEN_ABSOLUTE_TTL_DAYS=90
-TRUST_PROXY=0                    # set to 1 behind Railway/Render
-REFRESH_COOKIE_SAME_SITE=lax     # use "none" for cross-origin API in production (requires HTTPS)
-COOKIE_DOMAIN=                   # optional; e.g. .yourdomain.com
-RATE_LIMIT_DISABLED=0            # set to 1 only for local E2E (Playwright sets this automatically)
-```
+## What's included vs not
+
+| Included | Not built (by design) |
+|----------|------------------------|
+| Full B2B CRM core | Native mobile app |
+| AI assist (mock or OpenRouter) | SSO / SAML |
+| Integrations + CSV import | Billing / subscriptions |
+| Password reset, team invites | Heavy marketing automation |
+| Lead capture form, stale-deal alerts | |
+
+---
+
+## License
+
+Private project — see repository owner for usage terms.

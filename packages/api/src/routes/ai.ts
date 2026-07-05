@@ -16,6 +16,7 @@ import {
   generateMeetingSummaryWithAI,
   meetingSummaryResultSchema,
 } from '../lib/meetingSummary.js'
+import { scoreEmailDraft } from '../lib/emailQuality.js'
 import { isOpenRouterConfigured } from '../lib/openRouter.js'
 import {
   assertDealAccess,
@@ -218,6 +219,12 @@ router.post('/generate-email', async (req, res) => {
       message,
       context,
       activityId,
+      quality: scoreEmailDraft({
+        subject,
+        body,
+        contactName: context.contactName,
+        companyName: context.companyName,
+      }),
     })
   } catch (err) {
     if (handleRecordAccessError(err, res)) return
@@ -384,6 +391,21 @@ router.post('/summarize-meeting', async (req, res) => {
           taskActivityIds.push(task.id)
         }
       }
+    }
+
+    if (links?.dealId) {
+      const objectionCount = validated.objections.length
+      const riskLevel =
+        objectionCount >= 2 ? 'high' : objectionCount === 1 ? 'medium' : 'low'
+      const riskNote =
+        validated.objections.length > 0
+          ? `Objections: ${validated.objections.join('; ')}`
+          : validated.summary.slice(0, 280)
+
+      await prisma.deal.update({
+        where: { id: links.dealId },
+        data: { riskLevel, riskNote },
+      })
     }
 
     res.json({

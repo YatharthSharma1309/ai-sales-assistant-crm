@@ -32,10 +32,12 @@ import { MeetingSummaryPanel } from '../meetings/MeetingSummaryPanel'
 import { AssigneeSelect } from '../../shared/components/AssigneeSelect'
 import { fetchTeam } from '../../store/teamSlice'
 import { useRole } from '../../shared/hooks/useRole'
+import { useToast } from '../../shared/components/ToastProvider'
 
 export function DealDetailPage() {
   const { id } = useParams<{ id: string }>()
   const dispatch = useAppDispatch()
+  const { success, error: toastError } = useToast()
   const { isManager } = useRole()
   const { user } = useAppSelector((state) => state.auth)
   const { current: deal, currentError } = useAppSelector(
@@ -102,7 +104,10 @@ export function DealDetailPage() {
       }),
     )
     if (updateDeal.fulfilled.match(result)) {
+      success('Stage updated')
       refreshTimeline()
+    } else {
+      toastError('Failed to update stage')
     }
   }
 
@@ -110,7 +115,7 @@ export function DealDetailPage() {
     e.preventDefault()
     if (!deal) return
     setSaving(true)
-    await dispatch(
+    const result = await dispatch(
       updateDeal({
         id: deal.id,
         title: form.title,
@@ -124,6 +129,11 @@ export function DealDetailPage() {
       }),
     )
     setSaving(false)
+    if (updateDeal.fulfilled.match(result)) {
+      success('Deal saved')
+    } else {
+      toastError('Failed to save deal')
+    }
   }
 
   if (currentError || !deal) {
@@ -227,6 +237,25 @@ export function DealDetailPage() {
         </div>
 
         <aside className="space-y-4">
+          {(deal.riskLevel || deal.riskNote) && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-amber-900">
+                Deal risk signal
+              </h3>
+              {deal.riskLevel && (
+                <p className="mt-1 text-xs font-medium uppercase text-amber-700">
+                  {deal.riskLevel} risk
+                </p>
+              )}
+              {deal.riskNote && (
+                <p className="mt-2 text-sm text-amber-900">{deal.riskNote}</p>
+              )}
+              <p className="mt-2 text-xs text-amber-700">
+                Updated from the latest meeting summary.
+              </p>
+            </div>
+          )}
+
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">Stage</h3>
             <select

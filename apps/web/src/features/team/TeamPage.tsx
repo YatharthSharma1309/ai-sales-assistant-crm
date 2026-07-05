@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { ListErrorBanner } from '../../shared/components/ListErrorBanner'
+import { ListPageSkeleton } from '../../shared/components/Skeleton'
 import { PageHeader } from '../../shared/components/PageHeader'
+import { useToast } from '../../shared/components/ToastProvider'
 import { ROLE_LABELS, type OrgRole } from '../../shared/constants/roles'
 import { useRole } from '../../shared/hooks/useRole'
+import { useDialog } from '../../shared/components/DialogProvider'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { fetchMe } from '../../store/authSlice'
 import {
@@ -25,6 +28,8 @@ const ROLE_RANK: Record<OrgRole, number> = {
 
 export function TeamPage() {
   const dispatch = useAppDispatch()
+  const { confirm } = useDialog()
+  const { success, error: toastError } = useToast()
   const { isAdmin, isManager } = useRole()
   const { user } = useAppSelector((state) => state.auth)
   const { members, pendingInvites, loading, error } = useAppSelector(
@@ -36,9 +41,6 @@ export function TeamPage() {
     email: '',
     role: 'REP' as 'MANAGER' | 'REP',
   })
-  const [inviteError, setInviteError] = useState<string | null>(null)
-  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null)
-  const [mutationError, setMutationError] = useState<string | null>(null)
 
   const canInvite = isAdmin || isManager
 
@@ -61,8 +63,6 @@ export function TeamPage() {
 
   async function handleInvite(e: FormEvent) {
     e.preventDefault()
-    setInviteError(null)
-    setInviteSuccess(null)
     const result = await dispatch(
       inviteTeamMember({
         ...form,
@@ -74,14 +74,14 @@ export function TeamPage() {
       const inviteUrl = result.payload.inviteUrl
       setForm({ name: '', email: '', role: 'REP' })
       setShowInvite(false)
-      setInviteSuccess(
+      success(
         inviteUrl
           ? `Invite sent. Dev link: ${inviteUrl}`
           : `Invitation email sent to ${result.payload.email}.`,
       )
     } else if (inviteTeamMember.rejected.match(result)) {
       const payload = result.payload as { message?: string } | undefined
-      setInviteError(
+      toastError(
         payload?.message ??
           'Could not send invite. Email may already be on the team.',
       )
@@ -94,9 +94,9 @@ export function TeamPage() {
     previousRole: OrgRole,
     memberUserId: string,
   ) {
-    setMutationError(null)
     const result = await dispatch(updateMemberRole({ membershipId, role }))
     if (updateMemberRole.fulfilled.match(result)) {
+      success('Role updated')
       if (
         memberUserId === user?.id ||
         ROLE_RANK[role] < ROLE_RANK[previousRole]
@@ -106,18 +106,18 @@ export function TeamPage() {
       dispatch(fetchTeam())
     } else if (updateMemberRole.rejected.match(result)) {
       const payload = result.payload as { message?: string } | undefined
-      setMutationError(payload?.message ?? 'Failed to update role.')
+      toastError(payload?.message ?? 'Failed to update role.')
     }
   }
 
   async function handleRemove(membershipId: string) {
-    setMutationError(null)
     const result = await dispatch(removeTeamMember(membershipId))
     if (removeTeamMember.fulfilled.match(result)) {
+      success('Member removed')
       dispatch(fetchTeam())
     } else if (removeTeamMember.rejected.match(result)) {
       const payload = result.payload as { message?: string } | undefined
-      setMutationError(payload?.message ?? 'Failed to remove member.')
+      toastError(payload?.message ?? 'Failed to remove member.')
     }
   }
 
@@ -140,16 +140,6 @@ export function TeamPage() {
       />
 
       <ListErrorBanner error={error} />
-      {mutationError && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {mutationError}
-        </div>
-      )}
-      {inviteSuccess && (
-        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 break-all">
-          {inviteSuccess}
-        </div>
-      )}
 
       {showInvite && canInvite && (
         <form
@@ -205,9 +195,6 @@ export function TeamPage() {
               </div>
             )}
           </div>
-          {inviteError && (
-            <p className="mt-3 text-sm text-red-600">{inviteError}</p>
-          )}
           <button
             type="submit"
             className="mt-4 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white"
@@ -258,7 +245,7 @@ export function TeamPage() {
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading team...</p>
+        <ListPageSkeleton rows={5} />
       ) : members.length === 0 ? (
         <EmptyState
           title="No team members yet"
@@ -276,7 +263,42 @@ export function TeamPage() {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <>
+          <div className="space-y-3 md:hidden">
+            {members.map((member) => (
+              <div
+                key={member.id}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <p className="font-medium text-slate-900">{member.user.name}</p>
+                <p className="text-xs text-slate-500">{member.user.email}</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  {ROLE_LABELS[member.role]} · {member.leadCount ?? 0} leads ·{' '}
+                  {member.dealCount ?? 0} deals · {member.activityCount} activities
+                </p>
+                {isAdmin && member.user.id !== user?.id && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: 'Remove team member',
+                        message: `Remove ${member.user.name} from the team?`,
+                        confirmLabel: 'Remove',
+                        destructive: true,
+                      })
+                      if (!ok) return
+                      await handleRemove(member.id)
+                    }}
+                    className="mt-3 text-xs font-medium text-red-600 hover:text-red-700"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-slate-500">
               <tr>
@@ -336,13 +358,13 @@ export function TeamPage() {
                         <button
                           type="button"
                           onClick={async () => {
-                            if (
-                              !window.confirm(
-                                `Remove ${member.user.name} from the team?`,
-                              )
-                            ) {
-                              return
-                            }
+                            const ok = await confirm({
+                              title: 'Remove team member',
+                              message: `Remove ${member.user.name} from the team?`,
+                              confirmLabel: 'Remove',
+                              destructive: true,
+                            })
+                            if (!ok) return
                             await handleRemove(member.id)
                           }}
                           className="text-xs font-medium text-red-600 hover:text-red-700"
@@ -356,7 +378,8 @@ export function TeamPage() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </div>
   )

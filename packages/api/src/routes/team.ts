@@ -191,6 +191,9 @@ router.post('/invite', requireRole('ADMIN', 'MANAGER'), teamInviteLimiter, async
     role,
     inviteUrl,
     expiresAt,
+  }).catch((err) => {
+    if (process.env.NODE_ENV === 'production') throw err
+    console.warn('[team-invite] email send failed (non-fatal in dev):', err)
   })
 
   const response: Record<string, unknown> = {
@@ -278,6 +281,9 @@ router.post(
       role: invite.role,
       inviteUrl,
       expiresAt,
+    }).catch((err) => {
+      if (process.env.NODE_ENV === 'production') throw err
+      console.warn('[team-invite] resend email failed (non-fatal in dev):', err)
     })
 
     const response: Record<string, unknown> = {

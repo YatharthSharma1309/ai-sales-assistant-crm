@@ -2,12 +2,14 @@ import { expect, test } from '@playwright/test'
 import { LoginPage } from '../../pages/LoginPage'
 import { users } from '../../fixtures/users'
 
-test('admin login stores access token and refresh cookie', async ({ page }) => {
+test('admin login stores refresh cookie and reaches dashboard', async ({ page }) => {
   const login = new LoginPage(page)
   await login.login(users.admin.email, users.admin.password)
 
+  await expect(page).toHaveURL('/')
+
   const access = await page.evaluate(() => localStorage.getItem('crm_access_token'))
-  expect(access).toBeTruthy()
+  expect(access).toBeNull()
 
   const cookies = await page.context().cookies()
   expect(cookies.some((c) => c.name === 'crm_refresh')).toBe(true)

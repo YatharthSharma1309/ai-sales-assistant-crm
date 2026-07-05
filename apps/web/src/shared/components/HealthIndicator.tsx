@@ -22,7 +22,7 @@ export function HealthIndicator({ score, label, className = '' }: HealthIndicato
   return (
     <div className={className}>
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs font-medium uppercase text-slate-400">Pipeline health</p>
+        <p className="text-xs font-medium uppercase text-slate-400">Smart pipeline health</p>
         <p className={`text-sm font-semibold ${scoreColor(clamped)}`}>{label}</p>
       </div>
       <p className={`mt-1 text-2xl font-semibold ${scoreColor(clamped)}`}>{clamped}</p>

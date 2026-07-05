@@ -55,9 +55,15 @@ import {
   getGoogleOAuthSettingsForOrg,
   isGoogleOAuthConfiguredForOrg,
 } from '../lib/googleOAuth.js'
+import {
+  buildSalesforceAuthUrl,
+  exchangeSalesforceCode,
+  getValidSalesforceAccessToken,
+  isSalesforceOAuthConfigured,
+} from '../lib/salesforceOAuth.js'
 import { encryptSecret } from '../lib/secretStore.js'
 import { syncGmailForIntegration } from '../lib/gmailSync.js'
-import { getGmailSyncConfig } from '../jobs/gmailSyncJob.js'
+import { getGmailSyncConfig, triggerGmailSyncNow } from '../jobs/gmailSyncJob.js'
 import crypto from 'crypto'
 
 const router = Router()
@@ -66,6 +72,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173'
 const OAUTH_PURPOSE = 'google_oauth'
 const HUBSPOT_OAUTH_PURPOSE = 'hubspot_oauth'
 const GMAIL_OAUTH_PURPOSE = 'gmail_oauth'
+const SALESFORCE_OAUTH_PURPOSE = 'salesforce_oauth'
 const CRON_SECRET = process.env.CRON_SECRET
 
 const hubspotSchema = z.object({
@@ -147,6 +154,7 @@ router.get('/status', protectedMiddleware, async (req, res) => {
     },
     salesforce: {
       importAvailable: true,
+      oauthConfigured: isSalesforceOAuthConfigured(),
       connected: salesforceConnected,
       lastSyncAt: orgIntegrations.find((i) => i.provider === 'SALESFORCE')?.updatedAt,
       webhookUrl: getSalesforceWebhookUrl(),
@@ -441,6 +449,22 @@ router.post('/cron/calendar-sync', async (req, res) => {
   })
 })
 
+router.post('/cron/gmail-sync', async (req, res) => {
+  if (!verifyCronSecret(req)) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+
+  const results = await triggerGmailSyncNow()
+  res.json({
+    integrations: results.length,
+    created: results.reduce((sum, r) => sum + r.created, 0),
+    skipped: results.reduce((sum, r) => sum + r.skipped, 0),
+    errors: results.filter((r) => r.error).length,
+    results,
+  })
+})
+
 const hubspotConnectSchema = z.object({
   accessToken: z.string().min(1),
 })
@@ -626,6 +650,105 @@ router.delete(
 )
 
 router.post(
+  '/salesforce/auth-url',
+  protectedMiddleware,
+  requireRole('ADMIN', 'MANAGER'),
+  (req, res) => {
+    if (!isSalesforceOAuthConfigured()) {
+      res.status(503).json({
+        error: 'Salesforce OAuth not configured',
+        message: 'Set SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET',
+      })
+      return
+    }
+
+    const state = jwt.sign(
+      {
+        purpose: SALESFORCE_OAUTH_PURPOSE,
+        userId: req.auth!.userId,
+        organizationId: req.auth!.organizationId,
+      },
+      JWT_SECRET,
+      { expiresIn: '10m' },
+    )
+
+    const url = buildSalesforceAuthUrl(state)
+    res.json({ url })
+  },
+)
+
+router.get('/salesforce/callback', async (req, res) => {
+  const code = typeof req.query.code === 'string' ? req.query.code : undefined
+  const state = typeof req.query.state === 'string' ? req.query.state : undefined
+
+  if (!code || !state) {
+    res.redirect(`${FRONTEND_URL}/integrations?error=missing_params`)
+    return
+  }
+
+  try {
+    const payload = jwt.verify(state, JWT_SECRET) as {
+      purpose?: string
+      userId: string
+      organizationId: string
+    }
+
+    if (payload.purpose !== SALESFORCE_OAUTH_PURPOSE) {
+      throw new Error('Invalid OAuth state')
+    }
+
+    const tokens = await exchangeSalesforceCode(code)
+    const existing = await prisma.integration.findUnique({
+      where: {
+        organizationId_userId_provider: {
+          organizationId: payload.organizationId,
+          userId: payload.userId,
+          provider: 'SALESFORCE',
+        },
+      },
+    })
+    const existingMeta = existing?.metadata as { webhookSecret?: string } | null
+    const webhookSecret =
+      existingMeta?.webhookSecret ?? crypto.randomBytes(16).toString('hex')
+
+    await prisma.integration.upsert({
+      where: {
+        organizationId_userId_provider: {
+          organizationId: payload.organizationId,
+          userId: payload.userId,
+          provider: 'SALESFORCE',
+        },
+      },
+      create: {
+        organizationId: payload.organizationId,
+        userId: payload.userId,
+        provider: 'SALESFORCE',
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        metadata: {
+          instanceUrl: tokens.instance_url,
+          webhookSecret,
+          authMethod: 'oauth',
+        },
+      },
+      update: {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token ?? undefined,
+        metadata: {
+          instanceUrl: tokens.instance_url,
+          webhookSecret,
+          authMethod: 'oauth',
+        },
+      },
+    })
+
+    res.redirect(`${FRONTEND_URL}/integrations?connected=salesforce`)
+  } catch {
+    res.redirect(`${FRONTEND_URL}/integrations?error=salesforce_oauth_failed`)
+  }
+})
+
+router.post(
   '/salesforce/connect',
   protectedMiddleware,
   requireRole('ADMIN', 'MANAGER'),
@@ -710,8 +833,10 @@ router.post(
       return
     }
 
-    const metadata = integration.metadata as { instanceUrl?: string } | null
-    if (!metadata?.instanceUrl) {
+    const { accessToken, instanceUrl } = await getValidSalesforceAccessToken(
+      integration.id,
+    )
+    if (!instanceUrl) {
       res.status(400).json({ error: 'Salesforce instance URL missing' })
       return
     }
@@ -719,8 +844,8 @@ router.post(
     const result = await syncSalesforceIntegration(
       req.auth!.organizationId,
       integration.userId,
-      integration.accessToken,
-      metadata.instanceUrl,
+      accessToken,
+      instanceUrl,
     )
 
     await prisma.integration.update({

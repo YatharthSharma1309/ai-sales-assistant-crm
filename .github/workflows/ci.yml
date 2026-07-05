@@ -18,6 +18,7 @@ jobs:
       - run: npm install @rolldown/binding-linux-x64-gnu@1.0.3 lightningcss-linux-x64-gnu@1.32.0 @tailwindcss/oxide-linux-x64-gnu@4.3.0 --workspace=apps/web --no-save
       - run: npm run build:shared
       - run: npm run db:generate --workspace=packages/api
+      - run: npm run check:prisma-schemas
       - run: npm run test:api
       - run: npm run test:web
 

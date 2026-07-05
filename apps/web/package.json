@@ -17,7 +17,8 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-redux": "^9.3.0",
-    "react-router-dom": "^7.17.0"
+    "react-router-dom": "^7.17.0",
+    "recharts": "^3.9.2"
   },
   "optionalDependencies": {
     "@rolldown/binding-linux-x64-gnu": "1.0.3",

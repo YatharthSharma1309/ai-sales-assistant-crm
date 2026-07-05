@@ -23,8 +23,15 @@ import integrationsRoutes from './routes/integrations.js'
 import dashboardRoutes from './routes/dashboard.js'
 import teamRoutes from './routes/team.js'
 import organizationRoutes from './routes/organization.js'
+import searchRoutes from './routes/search.js'
+import publicRoutes from './routes/public.js'
+import automationRoutes from './routes/automation.js'
 import { startCalendarSyncJob } from './jobs/calendarSyncJob.js'
 import { startGmailSyncJob } from './jobs/gmailSyncJob.js'
+import { startStaleDealAlertsJob } from './jobs/staleDealAlertsJob.js'
+import { requestLogger } from './middleware/requestLogger.js'
+import { prisma } from './lib/prisma.js'
+import { logger } from './lib/logger.js'
 
 assertProductionEnvironment()
 
@@ -79,10 +86,29 @@ app.post(
 
 app.use(cookieParser())
 app.use(express.json({ limit: '1mb' }))
+app.use(requestLogger)
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'ai-sales-assistant-crm-api' })
+app.get('/api/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    res.json({
+      status: 'ok',
+      service: 'ai-sales-assistant-crm-api',
+      database: 'connected',
+    })
+  } catch (err) {
+    logger.error('health_check_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    res.status(503).json({
+      status: 'degraded',
+      service: 'ai-sales-assistant-crm-api',
+      database: 'disconnected',
+    })
+  }
 })
+
+app.use('/api/public', publicRoutes)
 
 app.use(globalLimiter)
 
@@ -99,6 +125,8 @@ app.use('/api/integrations', integrationsRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/team', teamRoutes)
 app.use('/api/organization', organizationRoutes)
+app.use('/api/search', searchRoutes)
+app.use('/api/automation', automationRoutes)
 
 app.use(errorHandler)
 
@@ -111,5 +139,6 @@ if (!isServerless) {
     console.log(`API running at http://localhost:${port}`)
     startCalendarSyncJob()
     startGmailSyncJob()
+    startStaleDealAlertsJob()
   })
 }

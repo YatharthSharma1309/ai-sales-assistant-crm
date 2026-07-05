@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { ListPagination } from '../../shared/components/ListPagination'
+import { ListPageSkeleton } from '../../shared/components/Skeleton'
 import { useListQuery } from '../../shared/hooks/useListQuery'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { fetchAccounts } from '../../store/accountsSlice'
@@ -154,14 +155,36 @@ export function ContactsPage() {
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading contacts...</p>
+        <ListPageSkeleton rows={6} />
       ) : items.length === 0 ? (
         <EmptyState
           title="No contacts yet"
           description="Add decision-makers and champions at your target accounts."
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <>
+          <div className="space-y-3 md:hidden">
+            {items.map((contact) => (
+              <Link
+                key={contact.id}
+                to={`/contacts/${contact.id}`}
+                className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <p className="font-medium text-brand-600">
+                  {contact.firstName} {contact.lastName}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {contact.jobTitle ?? 'No title'}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {contact.account?.name ?? 'No account'} ·{' '}
+                  {contact.email ?? 'No email'}
+                </p>
+              </Link>
+            ))}
+          </div>
+
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-slate-500">
               <tr>
@@ -204,7 +227,8 @@ export function ContactsPage() {
               ))}
             </tbody>
           </table>
-          <div className="border-t border-slate-200 px-4">
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white px-4 md:mt-0 md:border-0 md:px-0">
             <ListPagination
               pagination={{ page, pageSize, total, totalPages }}
               onPageChange={onPageChange}
@@ -212,7 +236,7 @@ export function ContactsPage() {
               loading={loading}
             />
           </div>
-        </div>
+        </>
       )}
     </div>
   )

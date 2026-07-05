@@ -1,7 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AcceptInvitePage } from './features/auth/AcceptInvitePage'
+import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage'
 import { LoginPage } from './features/auth/LoginPage'
 import { RegisterPage } from './features/auth/RegisterPage'
+import { ResetPasswordPage } from './features/auth/ResetPasswordPage'
 import { VerifyEmailChangePage } from './features/auth/VerifyEmailChangePage'
 import { AppLayout } from './features/layout/AppLayout'
 import { AuthLayout } from './features/layout/AuthLayout'
@@ -22,6 +24,10 @@ import { TeamPage } from './features/team/TeamPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { IntegrationsPage } from './features/integrations/IntegrationsPage'
 import { ManagerRoute } from './features/layout/ManagerRoute'
+import { PrivacyPage } from './features/legal/PrivacyPage'
+import { TermsPage } from './features/legal/TermsPage'
+import { HelpPage } from './features/help/HelpPage'
+import { LeadCapturePage } from './features/marketing/LeadCapturePage'
 
 export default function App() {
   return (
@@ -30,9 +36,13 @@ export default function App() {
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/invite/accept" element={<AcceptInvitePage />} />
           <Route path="/verify-email-change" element={<VerifyEmailChangePage />} />
         </Route>
+
+        <Route path="/capture/:slug" element={<LeadCapturePage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
@@ -48,7 +58,10 @@ export default function App() {
             <Route path="/meetings" element={<MeetingsPage />} />
             <Route path="/communications" element={<CommunicationsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/help" element={<HelpPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route element={<ManagerRoute />}>
               <Route path="/team" element={<TeamPage />} />

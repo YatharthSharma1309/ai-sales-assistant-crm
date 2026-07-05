@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Sparkles } from 'lucide-react'
+import { Skeleton } from '../../shared/components/Skeleton'
+import { useToast } from '../../shared/components/ToastProvider'
 import { api } from '../../shared/api/client'
 import type {
   EmailContext,
@@ -22,17 +24,16 @@ export function AiEmailGenerator({
   compact,
   onSavedToTimeline,
 }: AiEmailGeneratorProps) {
+  const { success, error: toastError } = useToast()
   const [context, setContext] = useState<EmailContext | null>(null)
   const [contextLoading, setContextLoading] = useState(false)
   const [tone, setTone] = useState<EmailTone>('professional')
   const [goal, setGoal] = useState<EmailGoal>('check_in')
   const [draft, setDraft] = useState<EmailDraftResult | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [saveToTimeline, setSaveToTimeline] = useState(true)
   const [sendTo, setSendTo] = useState('')
   const [sending, setSending] = useState(false)
-  const [sendResult, setSendResult] = useState<string | null>(null)
 
   const linkedToCrm = Boolean(leadId || dealId)
 
@@ -59,7 +60,6 @@ export function AiEmailGenerator({
   async function handleGenerate(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
-    setError(null)
     try {
       const payload: Record<string, unknown> = { tone, goal, saveToTimeline }
       if (leadId) payload.leadId = leadId
@@ -72,8 +72,9 @@ export function AiEmailGenerator({
       setDraft(result)
       if (result.context) setContext(result.context)
       if (result.activityId && onSavedToTimeline) onSavedToTimeline()
+      success('Email draft generated')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate')
+      toastError(err instanceof Error ? err.message : 'Failed to generate')
     } finally {
       setLoading(false)
     }
@@ -84,12 +85,12 @@ export function AiEmailGenerator({
     await navigator.clipboard.writeText(
       `Subject: ${draft.subject}\n\n${draft.body}`,
     )
+    success('Copied to clipboard')
   }
 
   async function handleSend() {
     if (!draft || !sendTo) return
     setSending(true)
-    setSendResult(null)
     try {
       const payload: Record<string, unknown> = {
         to: sendTo,
@@ -110,13 +111,13 @@ export function AiEmailGenerator({
       })
 
       if (result.sent) {
-        setSendResult('Email sent successfully.')
+        success('Email sent successfully')
         onSavedToTimeline?.()
       } else {
-        setSendResult(result.message ?? 'Email not sent — check Resend config.')
+        toastError(result.message ?? 'Email not sent — check Resend config.')
       }
     } catch (err) {
-      setSendResult(err instanceof Error ? err.message : 'Send failed')
+      toastError(err instanceof Error ? err.message : 'Send failed')
     } finally {
       setSending(false)
     }
@@ -145,7 +146,10 @@ export function AiEmailGenerator({
               CRM context
             </p>
             {contextLoading ? (
-              <p className="mt-2 text-sm text-slate-500">Loading context...</p>
+              <div className="mt-2 space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
             ) : context ? (
               <dl className="mt-2 space-y-1.5 text-sm">
                 <div className="flex gap-2">
@@ -251,12 +255,6 @@ export function AiEmailGenerator({
           </label>
         )}
 
-        {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-            {error}
-          </p>
-        )}
-
         <button
           type="submit"
           disabled={loading || (linkedToCrm && contextLoading)}
@@ -292,6 +290,39 @@ export function AiEmailGenerator({
 
         {draft ? (
           <div className="mt-4 space-y-4">
+            {draft.quality && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase text-slate-500">
+                    Send readiness
+                  </p>
+                  <span
+                    className={`text-sm font-bold ${
+                      draft.quality.score >= 70
+                        ? 'text-emerald-600'
+                        : draft.quality.score >= 50
+                          ? 'text-amber-600'
+                          : 'text-red-600'
+                    }`}
+                  >
+                    {draft.quality.score}/100 · {draft.quality.label}
+                  </span>
+                </div>
+                <ul className="mt-2 space-y-1">
+                  {draft.quality.factors.map((f) => (
+                    <li
+                      key={f.label}
+                      className="flex justify-between text-xs text-slate-600"
+                    >
+                      <span>{f.label}</span>
+                      <span>
+                        {f.score}/{f.max}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {draft.message && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 {draft.message}
@@ -300,11 +331,6 @@ export function AiEmailGenerator({
             {draft.activityId && (
               <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
                 Saved to timeline as email activity.
-              </p>
-            )}
-            {sendResult && (
-              <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                {sendResult}
               </p>
             )}
             {draft && (

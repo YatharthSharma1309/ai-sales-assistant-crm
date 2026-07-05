@@ -14,6 +14,8 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:generate:pg": "prisma generate --schema prisma/schema.postgresql.prisma",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "check:prisma-schemas": "node scripts/check-prisma-schema-sync.mjs",
     "test": "vitest run"
   },
   "dependencies": {

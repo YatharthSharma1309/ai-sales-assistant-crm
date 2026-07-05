@@ -7,10 +7,13 @@ import { ListPagination } from '../../shared/components/ListPagination'
 import { useListQuery } from '../../shared/hooks/useListQuery'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { ListErrorBanner } from '../../shared/components/ListErrorBanner'
+import { ListPageSkeleton } from '../../shared/components/Skeleton'
+import { useToast } from '../../shared/components/ToastProvider'
 import { createAccount, fetchAccounts } from '../../store/accountsSlice'
 
 export function AccountsPage() {
   const dispatch = useAppDispatch()
+  const { success, error: toastError } = useToast()
   const { items, loading, error, page, pageSize, total, totalPages } =
     useAppSelector((state) => state.accounts)
   const { page: queryPage, pageSize: queryPageSize, onPageChange, onPageSizeChange, resetPage } =
@@ -40,17 +43,22 @@ export function AccountsPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    await dispatch(
+    const result = await dispatch(
       createAccount({
         name,
         industry: industry || undefined,
         companySize: companySize || undefined,
       }),
     )
-    setName('')
-    setIndustry('')
-    setCompanySize('')
-    setShowForm(false)
+    if (createAccount.fulfilled.match(result)) {
+      success('Account created')
+      setName('')
+      setIndustry('')
+      setCompanySize('')
+      setShowForm(false)
+    } else {
+      toastError('Failed to create account')
+    }
   }
 
   return (
@@ -136,7 +144,7 @@ export function AccountsPage() {
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading accounts...</p>
+        <ListPageSkeleton rows={8} />
       ) : items.length === 0 ? (
         <EmptyState
           title="No accounts yet"
@@ -152,41 +160,63 @@ export function AccountsPage() {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">Company</th>
-                <th className="px-4 py-3 font-medium">Industry</th>
-                <th className="px-4 py-3 font-medium">Size</th>
-                <th className="px-4 py-3 font-medium">Contacts</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((account) => (
-                <tr key={account.id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-4 py-3">
-                    <Link
-                      to={`/accounts/${account.id}`}
-                      className="font-medium text-brand-600 hover:underline"
-                    >
-                      {account.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {account.industry ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {account.companySize ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {account._count?.contacts ?? 0}
-                  </td>
+        <>
+          <div className="space-y-3 md:hidden">
+            {items.map((account) => (
+              <Link
+                key={account.id}
+                to={`/accounts/${account.id}`}
+                className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <p className="font-medium text-brand-600">{account.name}</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {account.industry ?? 'No industry'}
+                  {account.companySize ? ` · ${account.companySize}` : ''}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {account._count?.contacts ?? 0} contact
+                  {(account._count?.contacts ?? 0) === 1 ? '' : 's'}
+                </p>
+              </Link>
+            ))}
+          </div>
+
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Company</th>
+                  <th className="px-4 py-3 font-medium">Industry</th>
+                  <th className="px-4 py-3 font-medium">Size</th>
+                  <th className="px-4 py-3 font-medium">Contacts</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="border-t border-slate-200 px-4">
+              </thead>
+              <tbody>
+                {items.map((account) => (
+                  <tr key={account.id} className="border-b border-slate-100 last:border-0">
+                    <td className="px-4 py-3">
+                      <Link
+                        to={`/accounts/${account.id}`}
+                        className="font-medium text-brand-600 hover:underline"
+                      >
+                        {account.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {account.industry ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {account.companySize ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {account._count?.contacts ?? 0}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white px-4 md:mt-0 md:border-0 md:px-0">
             <ListPagination
               pagination={{ page, pageSize, total, totalPages }}
               onPageChange={onPageChange}
@@ -194,7 +224,7 @@ export function AccountsPage() {
               loading={loading}
             />
           </div>
-        </div>
+        </>
       )}
     </div>
   )

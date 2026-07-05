@@ -35,10 +35,19 @@ export default defineConfig({
     {
       name: 'chromium-authed',
       dependencies: ['setup'],
-      testMatch: /(layout|team-permissions)\.spec\.ts/,
+      testMatch: /(layout|team-permissions|pipeline|ai-email)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         storageState: path.join(authDir, 'admin.json'),
+      },
+    },
+    {
+      name: 'chromium-manager',
+      dependencies: ['setup'],
+      testMatch: /leads\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: path.join(authDir, 'manager.json'),
       },
     },
   ],
@@ -59,7 +68,7 @@ export default defineConfig({
     {
       command: process.env.CI
         ? `npm run build --workspace=apps/web && npm run preview --workspace=apps/web -- --port ${webPort} --host`
-        : 'npm run dev --workspace=apps/web',
+        : `npm run dev --workspace=apps/web -- --port ${webPort} --strictPort`,
       cwd: root,
       port: Number(webPort),
       reuseExistingServer: false,

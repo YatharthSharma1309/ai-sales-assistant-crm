@@ -26,4 +26,9 @@ export type EmailDraftResult = {
   message?: string
   context?: EmailContext
   activityId?: string
+  quality?: {
+    score: number
+    label: string
+    factors: { label: string; score: number; max: number }[]
+  }
 }

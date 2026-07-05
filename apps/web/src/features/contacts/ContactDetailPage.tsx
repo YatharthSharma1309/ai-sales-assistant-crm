@@ -21,11 +21,13 @@ import {
   fetchContact,
   updateContact,
 } from '../../store/contactsSlice'
+import { useToast } from '../../shared/components/ToastProvider'
 import { MeetingSummaryPanel } from '../meetings/MeetingSummaryPanel'
 
 export function ContactDetailPage() {
   const { id } = useParams<{ id: string }>()
   const dispatch = useAppDispatch()
+  const { success, error: toastError } = useToast()
   const { isManager } = useRole()
   const { user } = useAppSelector((state) => state.auth)
   const { current: contact, currentError } = useAppSelector(
@@ -79,7 +81,7 @@ export function ContactDetailPage() {
   async function handleSave(e: FormEvent) {
     e.preventDefault()
     if (!contact) return
-    await dispatch(
+    const result = await dispatch(
       updateContact({
         id: contact.id,
         ...form,
@@ -87,7 +89,12 @@ export function ContactDetailPage() {
         accountId: form.accountId || null,
       }),
     )
-    setEditing(false)
+    if (updateContact.fulfilled.match(result)) {
+      success('Contact saved')
+      setEditing(false)
+    } else {
+      toastError('Failed to save contact')
+    }
   }
 
   if (currentError || !contact) {

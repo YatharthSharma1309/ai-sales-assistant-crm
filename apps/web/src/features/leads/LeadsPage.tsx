@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Upload } from 'lucide-react'
+import { Upload, RefreshCw } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { LeadScoreBadge } from '../../shared/components/LeadScoreBadge'
@@ -15,10 +15,14 @@ import { fetchContacts } from '../../store/contactsSlice'
 import { useRole } from '../../shared/hooks/useRole'
 import { fetchTeam } from '../../store/teamSlice'
 import { ListErrorBanner } from '../../shared/components/ListErrorBanner'
+import { ListPageSkeleton } from '../../shared/components/Skeleton'
+import { useToast } from '../../shared/components/ToastProvider'
+import { api } from '../../shared/api/client'
 import { createLead, fetchLeads, importLeads } from '../../store/leadsSlice'
 
 export function LeadsPage() {
   const dispatch = useAppDispatch()
+  const { success, error: toastError } = useToast()
   const { isManager } = useRole()
   const { items, loading, error, page, pageSize, total, totalPages } =
     useAppSelector((state) => state.leads)
@@ -36,6 +40,7 @@ export function LeadsPage() {
   const [source, setSource] = useState('Inbound')
   const [contactId, setContactId] = useState('')
   const [assignedFilter, setAssignedFilter] = useState('')
+  const [recalculating, setRecalculating] = useState(false)
 
   useEffect(() => {
     dispatch(fetchContacts({ pageSize: 100 }))
@@ -70,6 +75,7 @@ export function LeadsPage() {
         contactId: contactId || undefined,
       }),
     )
+    success('Lead created')
     setTitle('')
     setContactId('')
     setShowForm(false)
@@ -95,11 +101,29 @@ export function LeadsPage() {
           : undefined,
       }))
       await dispatch(importLeads(leads))
+      success(`Imported ${leads.length} lead(s)`)
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Import failed')
+      const message = err instanceof Error ? err.message : 'Import failed'
+      setImportError(message)
+      toastError(message)
     } finally {
       setImporting(false)
       if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function handleRecalculateScores() {
+    setRecalculating(true)
+    try {
+      const result = await api<{ updated: number }>('/api/leads/recalculate-scores', {
+        method: 'POST',
+      })
+      success(`Recalculated scores for ${result.updated} lead(s).`)
+      dispatch(fetchLeads({ page: queryPage, pageSize: queryPageSize }))
+    } catch {
+      toastError('Failed to recalculate lead scores.')
+    } finally {
+      setRecalculating(false)
     }
   }
 
@@ -124,15 +148,26 @@ export function LeadsPage() {
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={importing}
-              className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              className="btn-secondary"
             >
               <Upload size={16} />
               {importing ? 'Importing...' : 'Import CSV'}
             </button>
+            {isManager && (
+              <button
+                type="button"
+                onClick={() => void handleRecalculateScores()}
+                disabled={recalculating}
+                className="btn-secondary"
+              >
+                <RefreshCw size={16} className={recalculating ? 'animate-spin' : ''} />
+                {recalculating ? 'Scoring...' : 'Recalculate scores'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowForm((v) => !v)}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+              className="btn-primary"
             >
               {showForm ? 'Cancel' : 'Add lead'}
             </button>
@@ -142,18 +177,18 @@ export function LeadsPage() {
 
       <ListErrorBanner error={error} />
 
-      <div className="mb-4 flex flex-wrap gap-3">
+      <div className="card mb-4 flex flex-wrap gap-3 p-4">
         <input
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search leads..."
-          className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+          className="input-field max-w-xs"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as LeadStatus | '')}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="select-field w-auto min-w-[10rem]"
         >
           <option value="">All statuses</option>
           {Object.entries(LEAD_STATUS_LABELS).map(([value, label]) => (
@@ -166,7 +201,7 @@ export function LeadsPage() {
           <select
             value={assignedFilter}
             onChange={(e) => setAssignedFilter(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="select-field w-auto min-w-[10rem]"
           >
             <option value="">All assignees</option>
             <option value="unassigned">Unassigned</option>
@@ -192,29 +227,25 @@ export function LeadsPage() {
       {showForm && (
         <form
           onSubmit={handleSubmit}
-          className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          className="card mb-6 p-5"
         >
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Lead title
-              </label>
+              <label className="form-label">Lead title</label>
               <input
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Acme Corp — VP Engineering"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+                className="input-field"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Source
-              </label>
+              <label className="form-label">Source</label>
               <select
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+                className="select-field"
               >
                 <option>Inbound</option>
                 <option>Outbound</option>
@@ -223,13 +254,11 @@ export function LeadsPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Contact (optional)
-              </label>
+              <label className="form-label">Contact (optional)</label>
               <select
                 value={contactId}
                 onChange={(e) => setContactId(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="select-field"
               >
                 <option value="">None</option>
                 {contacts.map((c) => (
@@ -240,35 +269,52 @@ export function LeadsPage() {
               </select>
             </div>
           </div>
-          <button
-            type="submit"
-            className="mt-4 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-          >
+          <button type="submit" className="btn-primary mt-4">
             Save lead
           </button>
         </form>
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading leads...</p>
+        <ListPageSkeleton rows={8} />
       ) : items.length === 0 ? (
         <EmptyState
           title="No leads yet"
           description="Add your first prospect or import a CSV to get started."
           action={
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white"
-            >
+            <button type="button" onClick={() => setShowForm(true)} className="btn-primary">
               Add your first lead
             </button>
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <>
+          <div className="space-y-3 md:hidden">
+            {items.map((lead) => (
+              <Link
+                key={lead.id}
+                to={`/leads/${lead.id}`}
+                className="card card-hover block p-4"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-brand-600">{lead.title}</p>
+                  <LeadScoreBadge score={lead.score} />
+                </div>
+                <p className="mt-1 text-sm text-slate-600">
+                  {LEAD_STATUS_LABELS[lead.status]}
+                  {lead.source ? ` · ${lead.source}` : ''}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {lead.assignedTo?.name ?? 'Unassigned'} ·{' '}
+                  {new Date(lead.updatedAt).toLocaleDateString()}
+                </p>
+              </Link>
+            ))}
+          </div>
+
+          <div className="card hidden overflow-hidden md:block">
           <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-slate-500">
+            <thead className="table-head">
               <tr>
                 <th className="px-4 py-3 font-medium">Lead</th>
                 <th className="px-4 py-3 font-medium">Score</th>
@@ -281,7 +327,7 @@ export function LeadsPage() {
             </thead>
             <tbody>
               {items.map((lead) => (
-                <tr key={lead.id} className="border-b border-slate-100 last:border-0">
+                <tr key={lead.id} className="list-row">
                   <td className="px-4 py-3">
                     <Link
                       to={`/leads/${lead.id}`}
@@ -314,7 +360,8 @@ export function LeadsPage() {
               ))}
             </tbody>
           </table>
-          <div className="border-t border-slate-200 px-4">
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white px-4 md:mt-0 md:border-0 md:px-0">
             <ListPagination
               pagination={{ page, pageSize, total, totalPages }}
               onPageChange={onPageChange}
@@ -322,7 +369,7 @@ export function LeadsPage() {
               loading={loading}
             />
           </div>
-        </div>
+        </>
       )}
     </div>
   )

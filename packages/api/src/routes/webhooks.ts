@@ -13,6 +13,7 @@ import {
   SALESFORCE_SOURCE,
 } from '../lib/crmExternalSync.js'
 import { mapSalesforceStage } from '../lib/salesforceImport.js'
+import { verifySalesforceWebhookSignature } from '../lib/salesforceWebhooks.js'
 
 function publicRequestUri(req: Request): string {
   const base = process.env.API_PUBLIC_URL
@@ -74,15 +75,25 @@ export async function handleSalesforceWebhook(req: Request, res: Response) {
     return
   }
 
+  const rawBody =
+    req.body instanceof Buffer
+      ? req.body.toString('utf-8')
+      : typeof req.body === 'string'
+        ? req.body
+        : JSON.stringify(req.body)
+
+  if (
+    process.env.NODE_ENV === 'production' &&
+    req.headers['x-salesforce-signature'] &&
+    !verifySalesforceWebhookSignature(req, rawBody, secret)
+  ) {
+    res.status(401).json({ error: 'Invalid signature' })
+    return
+  }
+
   let body: unknown
   try {
-    const raw =
-      req.body instanceof Buffer
-        ? req.body.toString('utf-8')
-        : typeof req.body === 'string'
-          ? req.body
-          : JSON.stringify(req.body)
-    body = JSON.parse(raw)
+    body = JSON.parse(rawBody)
   } catch {
     res.status(400).json({ error: 'Invalid JSON' })
     return

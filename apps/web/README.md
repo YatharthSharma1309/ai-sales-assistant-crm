@@ -1,75 +1,71 @@
 # AI Sales Assistant CRM — Frontend
 
-React 19 + TypeScript + Vite SPA for the AI Sales Assistant CRM monorepo.
-
-See the [root README](../../README.md) for full setup, features, API docs, and deployment.
+React 19 + TypeScript + Vite SPA. See the [root README](../../README.md) and **[Beginner simulation](../../docs/BEGINNER_SIMULATION.md)** for full setup.
 
 ## Quick start
 
-From the repository root:
-
 ```bash
+# From repo root
 npm install
-npm run dev        # frontend only (port 5173)
-npm run dev:all    # API + frontend
+npm run db:push
+npm run seed:demo          # demo@example.com / DemoPass123!
+npm run dev:all            # API :3001 + web :5173
 ```
 
-The Vite dev server proxies `/api` to `http://localhost:3001` when `VITE_API_URL` is unset.
+Open [http://localhost:5173/login](http://localhost:5173/login). In-app guide: **Help** (`/help`).
+
+## Dev proxy
+
+Vite proxies `/api` → `http://localhost:3001` when `VITE_API_URL` is unset.
+
+Set `FRONTEND_URL` in `packages/api/.env` to match your Vite origin (default `http://localhost:5173`).
 
 ## Structure
 
 ```
 src/
   features/
-    auth/           → Login, register, accept invite, verify email change
-    layout/         → App shell, header/footer, protected/manager routes
-    dashboard/      → Metrics, onboarding, role-gated banners
-    team/           → Magic-link invites, pending invites, RBAC UI
-    settings/       → Profile, password, email change, logout-all
-    accounts/       → Accounts list + detail
-    contacts/       → Contacts list + detail
-    leads/          → Leads list + detail + scoring
-    pipeline/       → Kanban + deal detail
-    meetings/       → AI meeting summaries
-    communications/ → Email send + timeline
-    analytics/      → Pipeline forecast
-    integrations/   → HubSpot, Salesforce, Google, Gmail
-  store/            → Redux Toolkit slices (auth, team, leads, …)
+    auth/           Login, register, forgot/reset password, invites
+    layout/         App shell, sidebar, mobile bottom nav, header search
+    dashboard/      Metrics, onboarding checklist
+    accounts/       B2B companies
+    contacts/       People at accounts
+    leads/          Prospects, scoring, CSV import
+    pipeline/       Kanban board + deal detail
+    meetings/       AI meeting summaries
+    communications/ AI follow-up emails
+    analytics/      Funnel, trends, team stats
+    integrations/   Google, HubSpot, Salesforce, lead capture
+    marketing/      Public lead capture page (/capture/:slug)
+    help/           In-app walkthrough
+    settings/       Profile, sessions, automation
+    team/           Invites and roles
   shared/
-    api/client.ts   → Fetch wrapper, 401 refresh, dual-token storage
-    components/     → Reusable UI
-    hooks/          → useRole, useSyncRole
-    types/          → Shared TS types
+    components/     AppLogo, GlobalSearch, Charts, Toast, Modal, …
+    api/client.ts   Fetch + refresh cookie auth
+  store/            Redux Toolkit slices
 ```
 
-## Auth & tokens (frontend)
+## Auth (frontend)
 
 | Storage | Purpose |
 |---------|---------|
-| In-memory access JWT | 15-minute token sent as `Authorization: Bearer` (not persisted) |
-| `crm_refresh` (httpOnly cookie) | Opaque refresh token for `POST /api/auth/refresh` |
-| Legacy `localStorage` keys | Migrated once into memory on read, then cleared |
+| In-memory access JWT | `Authorization: Bearer` (15 min, not in localStorage) |
+| `crm_refresh` cookie | httpOnly refresh for silent session restore |
 
-All API calls use `credentials: 'include'` so the refresh cookie is sent. After a page reload, `restoreSession` refreshes the access token from the cookie. Sign out calls `POST /api/auth/logout` (clears cookie) then clears the in-memory token.
+Public routes: `/login`, `/register`, `/forgot-password`, `/reset-password`, `/invite/accept`, `/verify-email-change`, `/capture/:slug`.
 
-Public routes (no login required):
-
-- `/login`, `/register`
-- `/invite/accept?token=…` — accept team invite
-- `/verify-email-change?token=…` — confirm new email
-
-## Production build
+## Production
 
 ```bash
-# From repo root
 npm run build --workspace=apps/web
 ```
 
-On Vercel, set **`VITE_API_URL`** to your production API URL (no trailing slash). Optional: `VITE_APP_VERSION` for the footer version label. See [DEPLOY.md](../../DEPLOY.md).
+On Vercel: set **`VITE_API_URL`** to your API URL (no trailing slash). See [DEPLOY.md](../../DEPLOY.md).
 
 ## Tests
 
 ```bash
-npm run test:web     # Vitest unit tests (authSlice, route labels, …)
-npm run test:e2e     # Playwright smoke tests (repo root; uses ports 3011/5174)
+npm run test:web     # Vitest
+npm run test:e2e     # Playwright (from repo root; ports 3011/5174)
 ```

@@ -8,12 +8,15 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import {
   fetchDashboardForecast,
   fetchDashboardStats,
+  fetchDashboardTrends,
   fetchManagerDashboard,
   fetchOnboardingStatus,
 } from '../../store/dashboardSlice'
 import { DEAL_STAGES, isOpenStage } from '../../shared/constants/pipeline'
 import { OnboardingWizard } from '../onboarding/OnboardingWizard'
 import { ManagerOverview } from './ManagerOverview'
+import { StageBarChart, TrendLineChart } from '../../shared/components/Charts'
+import { ChartSkeleton } from '../../shared/components/Skeleton'
 
 const ONBOARDING_DISMISS_KEY = 'crm_onboarding_dismissed'
 
@@ -23,10 +26,12 @@ export function DashboardPage() {
   const {
     stats,
     forecast,
+    trends,
     manager,
     onboarding,
     loading,
     forecastLoading,
+    trendsLoading,
     managerLoading,
     error,
     forecastError,
@@ -62,6 +67,7 @@ export function DashboardPage() {
   useEffect(() => {
     dispatch(fetchDashboardStats())
     dispatch(fetchDashboardForecast())
+    dispatch(fetchDashboardTrends())
     dispatch(fetchOnboardingStatus())
     if (isManager) dispatch(fetchManagerDashboard())
 
@@ -154,10 +160,12 @@ export function DashboardPage() {
         <StatCard
           label="Total Leads"
           value={loading ? '—' : (stats?.leadCount ?? 0)}
+          accent="blue"
         />
         <StatCard
           label="Open Deals"
           value={loading ? '—' : (stats?.dealCount ?? 0)}
+          accent="violet"
         />
         <StatCard
           label="Weighted Pipeline"
@@ -166,6 +174,7 @@ export function DashboardPage() {
               ? '—'
               : `$${Math.round(weightedPipeline).toLocaleString()}`
           }
+          accent="emerald"
         />
         <StatCard
           label="Forecast Pipeline"
@@ -174,11 +183,50 @@ export function DashboardPage() {
               ? '—'
               : `$${Math.round(forecastPipeline).toLocaleString()}`
           }
+          accent="amber"
         />
       </div>
 
+      {forecast?.pipelineHealth && forecast.pipelineHealth.dealsAtRisk > 0 && (
+        <div
+          role="alert"
+          className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4"
+        >
+          <p className="text-sm font-medium text-amber-900">
+            {forecast.pipelineHealth.dealsAtRisk} deal
+            {forecast.pipelineHealth.dealsAtRisk === 1 ? '' : 's'} stalled for
+            more than 14 days
+          </p>
+          {forecast.pipelineHealth.staleDeals &&
+            forecast.pipelineHealth.staleDeals.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {forecast.pipelineHealth.staleDeals.map((deal) => (
+                  <li key={deal.id}>
+                    <Link
+                      to={`/pipeline/${deal.id}`}
+                      className="text-sm text-amber-800 underline hover:text-amber-950"
+                    >
+                      {deal.title}
+                    </Link>
+                    <span className="ml-2 text-xs text-amber-700">
+                      last updated{' '}
+                      {new Date(deal.updatedAt).toLocaleDateString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          <Link
+            to="/pipeline"
+            className="mt-3 inline-block text-sm font-medium text-amber-900 hover:underline"
+          >
+            View pipeline →
+          </Link>
+        </div>
+      )}
+
       {forecast?.pipelineHealth && (
-        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="card mt-6 p-6">
           <HealthIndicator
             score={forecast.pipelineHealth.score}
             label={forecast.pipelineHealth.label}
@@ -194,7 +242,33 @@ export function DashboardPage() {
       )}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="card p-6">
+          <h2 className="text-lg font-semibold text-slate-900">4-week trend</h2>
+          <div className="mt-4">
+            {trendsLoading ? (
+              <ChartSkeleton />
+            ) : (
+              <TrendLineChart data={trends?.weeks ?? []} />
+            )}
+          </div>
+        </section>
+
+        <section className="card p-6">
+          <h2 className="text-lg font-semibold text-slate-900">Deals by stage</h2>
+          <div className="mt-4">
+            <StageBarChart
+              data={DEAL_STAGES.map((s) => ({
+                stage: s.id,
+                label: s.label,
+                count: stageMap.get(s.id) ?? 0,
+              }))}
+            />
+          </div>
+        </section>
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <section className="card p-6">
           <h2 className="text-lg font-semibold text-slate-900">Pipeline snapshot</h2>
           <div className="mt-4 space-y-3">
             {DEAL_STAGES.filter((s) => isOpenStage(s.id)).map(
@@ -219,38 +293,26 @@ export function DashboardPage() {
           </Link>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="card p-6">
           <h2 className="text-lg font-semibold text-slate-900">Quick actions</h2>
           <div className="mt-4 flex flex-col gap-3">
-            <Link
-              to="/leads"
-              className="rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+            <Link to="/leads" className="btn-secondary justify-start">
               Add a new lead
             </Link>
-            <Link
-              to="/pipeline"
-              className="rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+            <Link to="/pipeline" className="btn-secondary justify-start">
               Create a deal
             </Link>
             <Link
               to="/communications"
-              className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm font-medium text-brand-700 hover:bg-brand-100"
+              className="rounded-xl border border-brand-200 bg-gradient-to-r from-brand-50 to-white px-4 py-3 text-sm font-semibold text-brand-700 transition-all hover:border-brand-300 hover:shadow-sm"
             >
               Generate AI follow-up email
             </Link>
-            <Link
-              to="/meetings"
-              className="rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+            <Link to="/meetings" className="btn-secondary justify-start">
               Summarize a meeting
             </Link>
             {isManager && (
-              <Link
-                to="/team"
-                className="rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
+              <Link to="/team" className="btn-secondary justify-start">
                 View team dashboard
               </Link>
             )}
